@@ -5,13 +5,13 @@ from setuptools import find_packages, setup
 # :==> Fill in your project data here
 # The package name is the name on PyPI
 # it is not the python module names.
-package_name = 'dt-pondcleaner'
-library_webpage = 'http://github.com/duckietown/template-library'
-maintainer = 'Mack'
-maintainer_email = 'admin@duckietown.org'
-short_description = 'A short description'
+package_name = 'dt-data-api'
+library_webpage = 'http://github.com/duckietown/lib-dt-data-api'
+maintainer = 'Andrea F. Daniele'
+maintainer_email = 'afdaniele@ttic.edu'
+short_description = 'Data API client library for Duckietown cloud storage'
 full_description = """
-A longer description.
+Data API client library for Duckietown cloud storage.
 """
 
 # read project details
@@ -35,16 +35,20 @@ def get_version_from_source(filename):
         raise ValueError(filename)
     return version
 
-version = get_version_from_source('src/duckietown_pondcleaner/__init__.py')
+version = get_version_from_source('src/dt_data_api/__init__.py')
 
 # read project dependencies
-# NO - dependencies.txt is for testing dependiences - EVERYTHING PINNED
+# NO - dependencies.txt is for testing dependencies - EVERYTHING PINNED
 # The requirements here must be broad.
 # dependencies_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'dependencies.txt')
 # with open(dependencies_file, 'rt') as fin:
 #     dependencies = list(filter(lambda line: not line.startswith('#'), fin.read().splitlines()))
 
-install_requires = []
+install_requires = [
+    'requests',
+    'dt-authentication'
+    # 'requests_toolbelt'
+]
 tests_require = []
 
 # compile description
@@ -56,9 +60,7 @@ description = """
 {long}
 """.format(name=package_name, short=short_description, long=full_description, underline=underline)
 
-console_scripts = [
-    "dt-pc-demo = duckietown_pondcleaner:dt_pc_demo",
-]
+console_scripts = []
 # setup package
 setup(
     name=package_name,

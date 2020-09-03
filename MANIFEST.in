@@ -1,1 +1,1 @@
-prune src/duckietown_pondcleaner_tests
+prune src/dt_data_api_tests

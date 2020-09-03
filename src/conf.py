@@ -1,8 +1,8 @@
 # -- Project information -----------------------------------------------------
 
-project = "Duckietown Pondcleaner"
+project = "Duckietown Data API Client"
 copyright = "Duckietown"
-author = "Mack"
+author = "Andrea F. Daniele"
 
 # -- General configuration ---------------------------------------------------
 
