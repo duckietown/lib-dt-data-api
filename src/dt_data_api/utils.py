@@ -2,29 +2,156 @@ import io
 import math
 import os
 import time
-from typing import Union, Iterator, BinaryIO, Optional, Callable
+from threading import Thread
+from typing import Union, Iterator, BinaryIO, Optional, Callable, Iterable
 from types import SimpleNamespace
 from functools import partial
 
 from .constants import MAXIMUM_ALLOWED_SIZE
 
 
-class TransferProgress(SimpleNamespace):
 
-    def __init__(self, total: int, transferred: int, speed: int, part: int = 1, parts: int = 1):
-        super(TransferProgress, self).__init__(
-            total=total,
-            transferred=transferred,
-            speed=speed,
-            part=part,
-            parts=parts
-        )
+class TransferProgress:
+
+    def __init__(self, total: int, transferred: int = 0, part: int = 1, parts: int = 1):
+        self._total = total
+        self._transferred = transferred
+        self._part = part
+        self._parts = parts
+        self._speed = 0
+        self._last_update_time = None
+        self._callbacks = set()
+
+    @property
+    def total(self) -> int:
+        return self._total
+
+    @property
+    def transferred(self) -> int:
+        return self._transferred
+
+    @property
+    def speed(self) -> float:
+        return self._speed
+
+    @property
+    def part(self) -> int:
+        return self._part
+
+    @property
+    def parts(self) -> int:
+        return self._parts
+
+    def register_callback(self, callback: Callable):
+        self._callbacks.add(callback)
+
+    def unregister_callback(self, callback: Callable):
+        if callback in self._callbacks:
+            self._callbacks.remove(callback)
+
+    def update(self, total: int = None, transferred: int = None,
+               part: int = None, parts: int = None):
+        if total is not None:
+            self._total = total
+        # ---
+        if transferred is not None:
+            new_data_len = transferred - self._transferred
+            if new_data_len > 0:
+                now = time.time()
+                if self._last_update_time is not None:
+                    self._speed = new_data_len / (now - self._last_update_time)
+                self._last_update_time = now
+            self._transferred = transferred
+        # ---
+        if part is not None:
+            self._part = part
+        # ---
+        if parts is not None:
+            self._parts = parts
+        # fire a new update event
+        self._fire()
+
+    def _fire(self):
+        for callback in self._callbacks:
+            callback(self)
 
     def __str__(self):
-        return super(TransferProgress, self).__str__()
+        return str({
+            'total': self._total,
+            'transferred': self._transferred,
+            'speed': self._speed,
+            'part': self._part,
+            'parts': self._parts
+        })
 
-    def __repr__(self):
-        return super(TransferProgress, self).__repr__()
+
+class WorkerThread(Thread):
+
+    def __init__(self, job: Callable, *args, **kwargs):
+        super(WorkerThread, self).__init__(*args, **kwargs)
+        self._job = job
+        self._is_shutdown = False
+        setattr(self, 'run', partial(self._job, worker=self))
+
+    @property
+    def is_shutdown(self):
+        return self._is_shutdown
+
+    def shutdown(self):
+        self._is_shutdown = True
+
+
+class TransferHandler:
+
+    def __init__(self, progress: TransferProgress):
+        self._progress = progress
+        self._workers = set()
+        self._session = None
+        self._callbacks = set()
+        # register the transfer handler as a progress callback
+        self._progress.register_callback(self._fire)
+
+    @property
+    def progress(self):
+        return self._progress
+
+    @property
+    def session(self):
+        return self._session
+
+    @session.setter
+    def session(self, session):
+        self._session = session
+
+    def add_worker(self, worker: WorkerThread):
+        self._workers.add(worker)
+
+    def register_callback(self, callback: Callable):
+        self._callbacks.add(callback)
+
+    def unregister_callback(self, callback: Callable):
+        if callback in self._callbacks:
+            self._callbacks.remove(callback)
+
+    def abort(self, block=False):
+        # stop workers
+        for worker in self._workers:
+            if not worker.is_shutdown:
+                worker.shutdown()
+        # wait for workers to finish
+        if block:
+            for worker in self._workers:
+                try:
+                    worker.join()
+                except:
+                    pass
+
+    def _fire(self, *args, **kwargs):
+        for callback in self._callbacks:
+            callback(self)
+
+    def __str__(self):
+        return str(self._progress)
 
 
 class IterableIO:
@@ -80,39 +207,21 @@ class MultipartBytesIO:
         return int(math.ceil(self._stream_length / self._part_size))
 
 
-# class MultipartFileIO:
-#
-#     def __init__(self, fname, limit: int = MAXIMUM_ALLOWED_SIZE):
-#         self._fname = fname
-#         self._stream = open(self._fname, 'rb')
-#         self._stream_length = os.path.getsize(self._fname)
-#         self._limit = limit
-#         self._start = 0
-#
-#     def __iter__(self):
-#         for cursor in range(0, self._stream_length, self._limit):
-#             self._stream.seek(cursor)
-#             yield RangedStream(self._stream, self._limit)
-#
-#     def number_of_parts(self):
-#         return int(math.ceil(self._stream_length / self._limit))
-
-
 class MonitoredIOIterator:
 
-    def __init__(self, iterator: Union[None, Iterator], total_bytes: int = -1,
-                 callback: Callable = None):
+    def __init__(self, progress: TransferProgress,
+                 iterator: Union[None, Iterator] = None, worker: Union[None, WorkerThread] = None):
+        self._progress = progress
         self._iterator = iterator
-        self._total_bytes = total_bytes
+        self._worker = worker
         self._transferred_bytes = 0
         self._last_time = None
-        self._callback = callback
 
     def set_iterator(self, iterator: Iterator):
         self._iterator = iterator
 
-    def set_callback(self, callback: Callable):
-        self._callback = callback
+    def set_worker(self, worker: WorkerThread):
+        self._worker = worker
 
     def __iter__(self):
         return self
@@ -120,19 +229,14 @@ class MonitoredIOIterator:
     def __next__(self):
         if self._iterator is None:
             raise StopIteration
+        if self._worker.is_shutdown:
+            raise StopIteration
         # ---
         data = next(self._iterator)
         self._transferred_bytes += len(data)
-        # crate TransferProgress object
-        progress = TransferProgress(
-            self._total_bytes,
-            self._transferred_bytes,
-            0 if self._last_time is None else len(data) / (time.time() - self._last_time)
-        )
+        # update progress handler
+        self._progress.update(transferred=self._transferred_bytes)
         # update time
         self._last_time = time.time()
-        # pass it to the callback
-        if self._callback:
-            self._callback(progress)
         # yield
         return data

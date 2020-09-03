@@ -1,22 +1,13 @@
 import os
 import io
-import time
-from functools import partial
 from typing import Union, BinaryIO, Callable
 import requests
 
 from .API import DataAPI
-from .utils import IterableIO, MonitoredIOIterator, MultipartBytesIO, TransferProgress
+from .utils import IterableIO, MonitoredIOIterator, MultipartBytesIO, TransferProgress, \
+    WorkerThread, TransferHandler
 from .constants import BUCKET_NAME, PUBLIC_STORAGE_URL
 from .exceptions import TransferError
-
-
-def _callback(progress, cb=None, part=1, parts=1):
-    if cb is None:
-        return
-    progress.part = part
-    progress.parts = parts
-    cb(progress)
 
 
 class Storage(object):
@@ -57,6 +48,8 @@ class Storage(object):
         # get parts metadata
         metas = [self.head(part) for part in parts]
         obj_length = sum([int(r['Content-Length']) for r in metas])
+        # create a progress object
+        progress = TransferProgress()
         # open destination
         dest_length = 0
         last_time = None
@@ -76,13 +69,14 @@ class Storage(object):
                 for chunk in res.iter_content(1024**2):
                     fout.write(chunk)
                     dest_length += len(chunk)
-                    speed = 0 if last_time is None else len(chunk) / (time.time() - last_time)
-                    if callback:
-                        callback(TransferProgress(obj_length, dest_length, speed, i, len(parts)))
-                    last_time = time.time()
 
-    def upload(self, source: Union[str, bytes, BinaryIO], destination: str, length: int = None,
-               callback: Callable = None):
+                    # TODO: use TransferHandler instead
+                    # speed = 0 if last_time is None else len(chunk) / (time.time() - last_time)
+                    # if callback:
+                    #     callback(TransferProgress(obj_length, dest_length, speed, i, len(parts)))
+                    # last_time = time.time()
+
+    def upload(self, source: Union[str, bytes, BinaryIO], destination: str, length: int = None):
         if isinstance(source, str):
             file_path = os.path.abspath(source)
             if not os.path.isfile(file_path):
@@ -104,48 +98,88 @@ class Storage(object):
         # create a multipart handler
         parts = MultipartBytesIO(source, source_len, part_size=10 * 1024**2)
         num_parts = parts.number_of_parts()
+        # create a transfer progress handler
+        progress = TransferProgress(total=source_len, parts=num_parts)
+        # create a transfer handler
+        handler = TransferHandler(progress)
         # create a monitored iterator
-        monitor = MonitoredIOIterator(None, source_len)
+        monitor = MonitoredIOIterator(progress)
         # sanitize destination
         destination = destination.lstrip('/')
         # create destination format
         destination_fmt = lambda p: \
             destination + (f'.{p:03d}' if num_parts > 1 else '')
-        # iterate over the parts
-        for part, (stream_len, stream) in enumerate(parts):
-            print(f'part {part+1}/{num_parts} has size {stream_len}')
-            dest_part = destination_fmt(part)
-            monitor.set_iterator(iter(IterableIO(stream)))
-            # create a callback
-            decorated_cb = partial(_callback, cb=callback, parts=num_parts, part=part+1)
-            monitor.set_callback(decorated_cb)
-            # round up metadata
-            metadata = {
-                'x-amz-meta-number-of-parts': str(num_parts)
-            }
-            # authorize request
-            url = self._api.authorize_request(
-                'put_object', self._full_name, dest_part, headers=metadata)
-            # prepare request
-            req = requests.Request('PUT', url, data=monitor).prepare()
-            # remove header 'Transfer-Encoding'
-            del req.headers['Transfer-Encoding']
-            # add header 'Content-Length'
-            req.headers['Content-Length'] = stream_len
-            # add metadata
-            req.headers.update(metadata)
-            # send request
-            try:
-                res = requests.Session().send(req)
-            except requests.exceptions.ConnectionError as e:
-                raise TransferError()
-            # parse response
-            if res.status_code != 200:
-                raise TransferError(f'Transfer Error: Code: {res.status_code} Message: {res.text}')
+
+        # define uploading job
+        def job(worker: WorkerThread, *args, **kwargs):
+            session = None
+            # iterate over the parts
+            for part, (stream_len, stream) in enumerate(parts):
+                if worker.is_shutdown:
+                    if session is not None:
+                        try:
+                            session.close()
+                        except:
+                            pass
+                    return
+                # ---
+                dest_part = destination_fmt(part)
+                monitor.set_iterator(iter(IterableIO(stream)))
+                # update progress
+                progress.update(part=part + 1)
+                # round up metadata
+                metadata = {
+                    'x-amz-meta-number-of-parts': str(num_parts)
+                }
+                # authorize request
+                url = self._api.authorize_request(
+                    'put_object', self._full_name, dest_part, headers=metadata)
+                # prepare request
+                req = requests.Request('PUT', url, data=monitor).prepare()
+                # remove header 'Transfer-Encoding'
+                del req.headers['Transfer-Encoding']
+                # add header 'Content-Length'
+                req.headers['Content-Length'] = stream_len
+                # add metadata
+                req.headers.update(metadata)
+                # send request
+                try:
+                    # open a session
+                    session = requests.Session()
+                    # register session with the handler
+                    handler.session = session
+                    # send request through the session
+                    res = session.send(req)
+                    print('Session finished')
+                except requests.exceptions.ConnectionError as e:
+                    raise TransferError()
+                # close the session
+                if session is not None:
+                    try:
+                        print('Closing session 1/2')
+                        session.close()
+                        # print('Closing session 2/2')
+                    except:
+                        pass
+                # parse response
+                if res.status_code != 200:
+                    raise TransferError(f'Transfer Error: Code: {res.status_code} Message: {res.text}')
+
+        # create a worker
+        worker_th = WorkerThread(job)
+        # register worker with the handler
+        handler.add_worker(worker_th)
+        # give the worker to the iterator monitor so that the flow of data can be interrupted
+        # when the worker is stopped
+        monitor.set_worker(worker_th)
+        # start the worker
+        worker_th.start()
+        # return transfer handler
+        return handler
 
     def _get_parts(self, obj: str):
         modes = [
-            (False, obj,          lambda _: obj),
+            (False,          obj, lambda _: obj),
             (True,  obj + '.000', lambda p: obj + f'.{p:03d}'),
         ]
         for multipart, source, part_name in modes:
