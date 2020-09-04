@@ -9,7 +9,7 @@ package_name = 'dt-data-api'
 library_webpage = 'http://github.com/duckietown/lib-dt-data-api'
 maintainer = 'Andrea F. Daniele'
 maintainer_email = 'afdaniele@ttic.edu'
-short_description = 'Data API client library for Duckietown cloud storage'
+short_description = 'Data API client library for Duckietown Cloud Storage'
 full_description = """
 Data API client library for Duckietown cloud storage.
 """
@@ -47,7 +47,6 @@ version = get_version_from_source('src/dt_data_api/__init__.py')
 install_requires = [
     'requests',
     'dt-authentication'
-    # 'requests_toolbelt'
 ]
 tests_require = []
 

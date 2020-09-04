@@ -23,3 +23,7 @@ sphinx
 sphinx-rtd-theme
 
 jupyter
+
+# library deps
+requests
+dt-authentication
