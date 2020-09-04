@@ -4,3 +4,7 @@ class APIError(BaseException):
 
 class TransferError(BaseException):
     pass
+
+
+class TransferAborted(BaseException):
+    pass
