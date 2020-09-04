@@ -1,11 +1,11 @@
-Welcome to the Duckietown Pondcleaner documentation
-===================================================
+Welcome to the Duckietown Data API documentation
+================================================
 
 .. toctree::
    :maxdepth: 2
    :caption: Contents:
 
-   duckietown_pondcleaner/index
+   dt_data_api/index
 
 
 Indices and tables

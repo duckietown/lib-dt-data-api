@@ -1,7 +1,7 @@
-tag=duckietown_pondcleaner
+tag=lib-dt-data-api
 
-regular_packages=duckietown_pondcleaner
-test_packages=duckietown_pondcleaner_tests
+regular_packages=dt_data_api
+test_packages=dt_data_api_tests
 cover_packages=$(test_packages),$(regular_packages)
 
 
@@ -80,7 +80,7 @@ run:
 #
 run-with-mounted-src:
 	mkdir -p out-docker
-	docker run -it -v $(PWD)/src:/duckietown_pondcleaner/src:ro -v $(PWD)/out-docker:/out $(tag) dt-pc-demo
+	docker run -it -v $(PWD)/src:/code/src:ro -v $(PWD)/out-docker:/out $(tag) dt-pc-demo
 
 
 coverage-report:
