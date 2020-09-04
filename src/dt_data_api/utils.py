@@ -1,14 +1,12 @@
 import io
 import math
-import os
 import time
 from threading import Thread
-from typing import Union, Iterator, BinaryIO, Optional, Callable, Iterable
-from types import SimpleNamespace
+from typing import Union, Iterator, BinaryIO, Optional, Callable
 from functools import partial
 
-from .constants import MAXIMUM_ALLOWED_SIZE
-
+from .constants import MAXIMUM_ALLOWED_SIZE, TRANSFER_BUF_SIZE_B
+from .exceptions import TransferAborted
 
 
 class TransferProgress:
@@ -106,7 +104,6 @@ class TransferHandler:
     def __init__(self, progress: TransferProgress):
         self._progress = progress
         self._workers = set()
-        self._session = None
         self._callbacks = set()
         # register the transfer handler as a progress callback
         self._progress.register_callback(self._fire)
@@ -114,14 +111,6 @@ class TransferHandler:
     @property
     def progress(self):
         return self._progress
-
-    @property
-    def session(self):
-        return self._session
-
-    @session.setter
-    def session(self, session):
-        self._session = session
 
     def add_worker(self, worker: WorkerThread):
         self._workers.add(worker)
@@ -141,12 +130,13 @@ class TransferHandler:
         # wait for workers to finish
         if block:
             for worker in self._workers:
+                # noinspection PyBroadException
                 try:
                     worker.join()
-                except:
+                except BaseException:
                     pass
 
-    def _fire(self, *args, **kwargs):
+    def _fire(self, *_, **__):
         for callback in self._callbacks:
             callback(self)
 
@@ -156,7 +146,7 @@ class TransferHandler:
 
 class IterableIO:
 
-    def __init__(self, stream: Union[io.RawIOBase, BinaryIO], bufsize: int = 1024**2):
+    def __init__(self, stream: Union[io.RawIOBase, BinaryIO], bufsize: int = TRANSFER_BUF_SIZE_B):
         self._stream = stream
         self._bufsize = bufsize
 
@@ -228,9 +218,9 @@ class MonitoredIOIterator:
 
     def __next__(self):
         if self._iterator is None:
-            raise StopIteration
+            raise StopIteration()
         if self._worker.is_shutdown:
-            raise StopIteration
+            raise TransferAborted()
         # ---
         data = next(self._iterator)
         self._transferred_bytes += len(data)
