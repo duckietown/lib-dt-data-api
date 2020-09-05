@@ -4,7 +4,7 @@ from .Storage import Storage
 
 class DataClient(object):
 
-    def __init__(self, token):
+    def __init__(self, token=None):
         self._api = DataAPI(token)
 
     @property

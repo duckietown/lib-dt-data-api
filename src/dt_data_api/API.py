@@ -9,9 +9,14 @@ class DataAPI(object):
 
     def __init__(self, token):
         # validate the token
-        DuckietownToken.from_string(token)
+        if token is not None:
+            DuckietownToken.from_string(token)
         # store the raw token
         self._token = token
+
+    @property
+    def token(self):
+        return self._token
 
     def authorize_request(self, action, bucket, obj, headers=None):
         api_url = DATA_API_URL.format(action=action, bucket=bucket, object=obj)

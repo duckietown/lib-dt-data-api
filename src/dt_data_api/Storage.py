@@ -24,6 +24,7 @@ class Storage(object):
             url = PUBLIC_STORAGE_URL.format(bucket=self._name, object=obj)
         else:
             # you need permission for this, authorize request
+            self._check_token(f'Storage[{self._name}].head(...)')
             url = self._api.authorize_request('head_object', self._full_name, obj)
         # send request
         try:
@@ -71,6 +72,7 @@ class Storage(object):
                         url = PUBLIC_STORAGE_URL.format(bucket=self._name, object=part)
                     else:
                         # you need permission for this, authorize request
+                        self._check_token(f'Storage[{self._name}].download(...)')
                         url = self._api.authorize_request('get_object', self._full_name, part)
                     # send request
                     res = requests.get(url, stream=True)
@@ -146,6 +148,7 @@ class Storage(object):
                     'x-amz-meta-number-of-parts': str(num_parts)
                 }
                 # authorize request
+                self._check_token(f'Storage[{self._name}].upload(...)')
                 url = self._api.authorize_request(
                     'put_object', self._full_name, dest_part, headers=metadata)
                 # prepare request
@@ -197,3 +200,9 @@ class Storage(object):
             except FileNotFoundError:
                 pass
         raise FileNotFoundError(f"Object '{obj}' not found")
+
+    def _check_token(self, resource=None):
+        if self._api.token is None:
+            resource = 'This resource' if not resource else f'The rosource {resource}'
+            raise ValueError(f'{resource} requires a valid token. Initialize the DataClient '
+                             f'object with the `token` argument set.')
