@@ -4,7 +4,7 @@ from typing import Union, BinaryIO
 import requests
 
 from . import logger
-from .API import DataAPI
+from .api import DataAPI
 from .utils import IterableIO, MonitoredIOIterator, MultipartBytesIO, TransferProgress, \
     WorkerThread, TransferHandler
 from .constants import BUCKET_NAME, PUBLIC_STORAGE_URL, TRANSFER_BUF_SIZE_B
@@ -12,6 +12,41 @@ from .exceptions import TransferError, TransferAborted
 
 
 class Storage(object):
+    """
+    The ``LineDetectorNode`` is responsible for detecting the line white, yellow and red line segment in an image and
+    is used for lane localization.
+
+    Upon receiving an image, this node reduces its resolution, cuts off the top part so that only the
+    road-containing part of the image is left, extracts the white, red, and yellow segments and publishes them.
+    The main functionality of this node is implemented in the :py:class:`line_detector.LineDetector` class.
+
+    The performance of this node can be very sensitive to its configuration parameters. Therefore, it also provides a
+    number of debug topics which can be used for fine-tuning these parameters. These configuration parameters can be
+    changed dynamically while the node is running via ``rosparam set`` commands.
+
+    Args:
+        node_name (:obj:`str`): a unique, descriptive name for the node that ROS will use
+
+    Configuration:
+        ~line_detector_parameters (:obj:`dict`): A dictionary with the parameters for the detector. The full list can be found in :py:class:`line_detector.LineDetector`.
+        ~colors (:obj:`dict`): A dictionary of colors and color ranges to be detected in the image. The keys (color names) should match the ones in the Segment message definition, otherwise an exception will be thrown! See the ``config`` directory in the node code for the default ranges.
+        ~img_size (:obj:`list` of ``int``): The desired downsized resolution of the image. Lower resolution would result in faster detection but lower performance, default is ``[120,160]``
+        ~top_cutoff (:obj:`int`): The number of rows to be removed from the top of the image _after_ resizing, default is 40
+
+    Subscriber:
+        ~camera_node/image/compressed (:obj:`sensor_msgs.msg.CompressedImage`): The camera images
+        ~anti_instagram_node/thresholds(:obj:`duckietown_msgs.msg.AntiInstagramThresholds`): The thresholds to do color correction
+
+    Publishers:
+        ~segment_list (:obj:`duckietown_msgs.msg.SegmentList`): A list of the detected segments. Each segment is an :obj:`duckietown_msgs.msg.Segment` message
+        ~debug/segments/compressed (:obj:`sensor_msgs.msg.CompressedImage`): Debug topic with the segments drawn on the input image
+        ~debug/edges/compressed (:obj:`sensor_msgs.msg.CompressedImage`): Debug topic with the Canny edges drawn on the input image
+        ~debug/maps/compressed (:obj:`sensor_msgs.msg.CompressedImage`): Debug topic with the regions falling in each color range drawn on the input image
+        ~debug/ranges_HS (:obj:`sensor_msgs.msg.Image`): Debug topic with a histogram of the colors in the input image and the color ranges, Hue-Saturation projection
+        ~debug/ranges_SV (:obj:`sensor_msgs.msg.Image`): Debug topic with a histogram of the colors in the input image and the color ranges, Saturation-Value projection
+        ~debug/ranges_HV (:obj:`sensor_msgs.msg.Image`): Debug topic with a histogram of the colors in the input image and the color ranges, Hue-Value projection
+
+    """
 
     def __init__(self, api: DataAPI, name: str):
         self._api = api

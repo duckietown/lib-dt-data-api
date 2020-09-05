@@ -77,7 +77,7 @@ test-docker: build
 run:
 	mkdir -p out-docker
 	docker run -it -v $(PWD)/out-docker:/out $(tag) dt-pc-demo
-#
+
 run-with-mounted-src:
 	mkdir -p out-docker
 	docker run -it -v $(PWD)/src:/code/src:ro -v $(PWD)/out-docker:/out $(tag) dt-pc-demo

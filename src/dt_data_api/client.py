@@ -1,5 +1,5 @@
-from .API import DataAPI
-from .Storage import Storage
+from .api import DataAPI
+from .storage import Storage
 
 
 class DataClient(object):
