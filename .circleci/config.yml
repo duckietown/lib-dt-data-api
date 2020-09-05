@@ -70,6 +70,11 @@ jobs:
           path: out/tests
           destination: tests
 
+      - store_artifacts:
+          when: always
+          path: out/docs
+          destination: docs
+
       - run:
           name: CodeCov
           when: always
