@@ -1,12 +1,74 @@
 import io
 import math
 import time
+from enum import Enum
 from threading import Thread
 from typing import Union, Iterator, BinaryIO, Optional, Callable
 from functools import partial
 
 from .constants import MAXIMUM_ALLOWED_SIZE, TRANSFER_BUF_SIZE_B
 from .exceptions import TransferAborted
+
+
+class WorkerThread(Thread):
+    """
+    Worker thread performing a generic `job`.
+
+    Args:
+        job:    A callable object expecting this `WorkerThread` object as first and sole argument.
+        args:   Other positional arguments for the underlying :py:class:`threading.Thread` object.
+        kwargs: Other named arguments for the underlying :py:class:`threading.Thread` object.
+    """
+
+    def __init__(self, job: Callable, *args, **kwargs):
+        super(WorkerThread, self).__init__(*args, **kwargs)
+        self._job = job
+        self._is_shutdown = False
+        setattr(self, 'run', partial(self._job, worker=self))
+
+    @property
+    def is_shutdown(self) -> bool:
+        """
+        Whether the worker is interrupted.
+        """
+        return self._is_shutdown
+
+    def shutdown(self):
+        """
+        Interrupts the worker.
+        """
+        self._is_shutdown = True
+
+
+class TransferStatus(Enum):
+    """
+    Models the status of a transfer operation.
+
+    UNKNOWN:
+        Unknown status.
+
+    READY:
+        Transfer is ready but has not started yet.
+
+    ACTIVE:
+        Transfer is currently active. Data is flowing.
+
+    STOPPED:
+        The transfer was stopped before the end.
+
+    FINISHED:
+        The transfer successfully finished.
+
+    ERROR:
+        An error occurred and the transfer was interrupted.
+    """
+
+    UNKNOWN = 0
+    READY = 1
+    ACTIVE = 10
+    STOPPED = 20
+    FINISHED = 30
+    ERROR = 90
 
 
 class TransferProgress:
@@ -149,36 +211,6 @@ class TransferProgress:
         })
 
 
-class WorkerThread(Thread):
-    """
-    Worker thread performing a generic `job`.
-
-    Args:
-        job:    A callable object expecting this `WorkerThread` object as first and sole argument.
-        args:   Other positional arguments for the underlying :py:class:`threading.Thread` object.
-        kwargs: Other named arguments for the underlying :py:class:`threading.Thread` object.
-    """
-
-    def __init__(self, job: Callable, *args, **kwargs):
-        super(WorkerThread, self).__init__(*args, **kwargs)
-        self._job = job
-        self._is_shutdown = False
-        setattr(self, 'run', partial(self._job, worker=self))
-
-    @property
-    def is_shutdown(self) -> bool:
-        """
-        Whether the worker is interrupted.
-        """
-        return self._is_shutdown
-
-    def shutdown(self):
-        """
-        Interrupts the worker.
-        """
-        self._is_shutdown = True
-
-
 class TransferHandler:
     """
     Models a transfer operation.
@@ -189,17 +221,58 @@ class TransferHandler:
 
     def __init__(self, progress: TransferProgress):
         self._progress = progress
+        self._status = TransferStatus.UNKNOWN
+        self._reason = '(none)'
         self._workers = set()
         self._callbacks = set()
         # register the transfer handler as a progress callback
         self._progress.register_callback(self._fire)
 
     @property
-    def progress(self):
+    def status(self) -> TransferStatus:
+        """
+        The current status of this transfer operation.
+        """
+        return self._status
+
+    @status.setter
+    def status(self, new_status: TransferStatus):
+        """
+        Sets new transfer status.
+
+        Args:
+            new_status: New status.
+        """
+        if not isinstance(new_status, TransferStatus):
+            raise ValueError(f'Expected `new_status` of type `TransferStatus`. '
+                             f'Got `{str(type(new_status))}` instead.')
+        self._status = new_status
+
+    @property
+    def progress(self) -> TransferProgress:
         """
         The progress monitor for this transfer operation.
         """
         return self._progress
+
+    @property
+    def reason(self) -> str:
+        """
+        A textual description of why the transfer is in the current status.
+        For example, when the status is `ERROR`, this carries an error message.
+        """
+        return self._reason
+
+    def set_status(self, new_status: TransferStatus, reason: str):
+        """
+        Sets transfer status and relative reason.
+
+        Args:
+            new_status: New status.
+            reason:     A description of what triggered this change in status.
+        """
+        self.status = new_status
+        self._reason = reason
 
     def add_worker(self, worker: WorkerThread):
         """

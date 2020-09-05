@@ -6,9 +6,9 @@ import requests
 from . import logger
 from .api import DataAPI
 from .utils import IterableIO, MonitoredIOIterator, MultipartBytesIO, TransferProgress, \
-    WorkerThread, TransferHandler
+    WorkerThread, TransferHandler, TransferStatus
 from .constants import BUCKET_NAME, PUBLIC_STORAGE_URL, TRANSFER_BUF_SIZE_B
-from .exceptions import TransferError, TransferAborted
+from .exceptions import TransferError, TransferAborted, APIError
 
 
 class Storage(object):
@@ -188,9 +188,13 @@ class Storage(object):
         # create destination format
         destination_fmt = lambda p: \
             destination + (f'.{p:03d}' if num_parts > 1 else '')
+        # set status to READY
+        handler.set_status(TransferStatus.READY, 'Worker created')
 
         # define uploading job
         def job(worker: WorkerThread, *_, **__):
+            # set status to ACTIVE
+            handler.set_status(TransferStatus.ACTIVE, 'Worker started')
             # iterate over the parts
             for part, (stream_len, stream) in enumerate(parts):
                 if worker.is_shutdown:
@@ -207,8 +211,13 @@ class Storage(object):
                 }
                 # authorize request
                 self._check_token(f'Storage[{self._name}].upload(...)')
-                url = self._api.authorize_request(
-                    'put_object', self._full_name, dest_part, headers=metadata)
+                try:
+                    url = self._api.authorize_request(
+                        'put_object', self._full_name, dest_part, headers=metadata)
+                except APIError as e:
+                    # set status to ERROR
+                    handler.set_status(TransferStatus.ERROR, str(e))
+                    return
                 # prepare request
                 req = requests.Request('PUT', url, data=monitor).prepare()
                 # remove header 'Transfer-Encoding'
@@ -224,14 +233,21 @@ class Storage(object):
                     # send request through the session
                     res = session.send(req)
                 except requests.exceptions.ConnectionError as e:
-                    raise TransferError(e)
+                    # set status to ERROR
+                    handler.set_status(TransferStatus.ERROR, str(e))
+                    logger.debug(f'ERROR: {str(e)}')
+                    return
                 except TransferAborted:
-                    logger.debug('Transfer aborted!')
+                    # set status to ERROR
+                    handler.set_status(TransferStatus.STOPPED, 'Transfer aborted by the user')
+                    logger.debug('Transfer aborted by the user!')
                     return
                 # parse response
                 if res.status_code != 200:
-                    raise TransferError(
-                        f'Transfer Error: Code: {res.status_code} Message: {res.text}')
+                    # set status to ERROR
+                    handler.set_status(TransferStatus.ERROR, res.text)
+                    logger.debug(f'Transfer Error: Code: {res.status_code} Message: {res.text}')
+                    return
 
         # create a worker
         worker_th = WorkerThread(job)

@@ -167,8 +167,28 @@ Code API: dt_data_api
    :members:
 
 
+`TransferStatus`
+----------------
+
+.. autoclass:: dt_data_api.TransferStatus
+   :members:
+
+
 `TransferProgress`
 ------------------
 
 .. autoclass:: dt_data_api.TransferProgress
+   :members:
+
+
+Exceptions
+----------
+
+.. autoclass:: dt_data_api.APIError
+   :members:
+
+.. autoclass:: dt_data_api.TransferError
+   :members:
+
+.. autoclass:: dt_data_api.InvalidToken
    :members:
