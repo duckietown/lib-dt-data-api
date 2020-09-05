@@ -90,9 +90,18 @@ class Storage(object):
         # create a transfer handler
         progress = TransferProgress(obj_length, parts=len(parts))
         handler = TransferHandler(progress)
+        # set status to READY
+        handler.set_status(TransferStatus.READY, 'Worker created')
+
+        # clean up job
+        def clean_up():
+            if os.path.exists(destination) and os.path.isfile(destination):
+                os.remove(destination)
 
         # define downloading job
         def job(worker: WorkerThread, *_, **__):
+            # set status to ACTIVE
+            handler.set_status(TransferStatus.ACTIVE, 'Worker started')
             # open destination
             with open(destination, 'wb') as fout:
                 # download parts
@@ -100,6 +109,13 @@ class Storage(object):
                     # check worker
                     if worker.is_shutdown:
                         logger.debug('Transfer aborted!')
+                        # set status to STOPPED
+                        handler.set_status(TransferStatus.STOPPED, 'Worker was stopped')
+                        # clean up partial files
+                        clean_up()
+                        # tell the server we are done
+                        res.close()
+                        # get out of here
                         return
                     # ---
                     # update progress
@@ -111,7 +127,12 @@ class Storage(object):
                     else:
                         # you need permission for this, authorize request
                         self._check_token(f'Storage[{self._name}].download(...)')
-                        url = self._api.authorize_request('get_object', self._full_name, part)
+                        try:
+                            url = self._api.authorize_request('get_object', self._full_name, part)
+                        except APIError as e:
+                            # set status to ERROR
+                            handler.set_status(TransferStatus.ERROR, str(e))
+                            return
                     # send request
                     res = requests.get(url, stream=True)
                     # stream content
@@ -119,7 +140,13 @@ class Storage(object):
                         # check worker
                         if worker.is_shutdown:
                             logger.debug('Transfer aborted!')
+                            # set status to STOPPED
+                            handler.set_status(TransferStatus.STOPPED, 'Worker was stopped')
+                            # clean up partial files
+                            clean_up()
+                            # tell the server we are done
                             res.close()
+                            # get out of here
                             return
                         # ---
                         fout.write(chunk)
@@ -239,8 +266,8 @@ class Storage(object):
                     return
                 except TransferAborted:
                     # set status to ERROR
-                    handler.set_status(TransferStatus.STOPPED, 'Transfer aborted by the user')
-                    logger.debug('Transfer aborted by the user!')
+                    handler.set_status(TransferStatus.STOPPED, 'Worker was stopped')
+                    logger.debug('Worker was stopped!')
                     return
                 # parse response
                 if res.status_code != 200:
