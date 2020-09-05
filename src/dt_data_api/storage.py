@@ -1,6 +1,6 @@
 import os
 import io
-from typing import Union, BinaryIO
+from typing import Union, BinaryIO, Dict
 import requests
 
 from . import logger
@@ -13,39 +13,15 @@ from .exceptions import TransferError, TransferAborted
 
 class Storage(object):
     """
-    The ``LineDetectorNode`` is responsible for detecting the line white, yellow and red line segment in an image and
-    is used for lane localization.
+    Provides an interface to a storage space on the DCSS.
 
-    Upon receiving an image, this node reduces its resolution, cuts off the top part so that only the
-    road-containing part of the image is left, extracts the white, red, and yellow segments and publishes them.
-    The main functionality of this node is implemented in the :py:class:`line_detector.LineDetector` class.
-
-    The performance of this node can be very sensitive to its configuration parameters. Therefore, it also provides a
-    number of debug topics which can be used for fine-tuning these parameters. These configuration parameters can be
-    changed dynamically while the node is running via ``rosparam set`` commands.
+    .. warning::
+        You should not create instances of this class yourself. Use the method
+        :py:meth:`dt_data_api.DataClient.storage` instead.
 
     Args:
-        node_name (:obj:`str`): a unique, descriptive name for the node that ROS will use
-
-    Configuration:
-        ~line_detector_parameters (:obj:`dict`): A dictionary with the parameters for the detector. The full list can be found in :py:class:`line_detector.LineDetector`.
-        ~colors (:obj:`dict`): A dictionary of colors and color ranges to be detected in the image. The keys (color names) should match the ones in the Segment message definition, otherwise an exception will be thrown! See the ``config`` directory in the node code for the default ranges.
-        ~img_size (:obj:`list` of ``int``): The desired downsized resolution of the image. Lower resolution would result in faster detection but lower performance, default is ``[120,160]``
-        ~top_cutoff (:obj:`int`): The number of rows to be removed from the top of the image _after_ resizing, default is 40
-
-    Subscriber:
-        ~camera_node/image/compressed (:obj:`sensor_msgs.msg.CompressedImage`): The camera images
-        ~anti_instagram_node/thresholds(:obj:`duckietown_msgs.msg.AntiInstagramThresholds`): The thresholds to do color correction
-
-    Publishers:
-        ~segment_list (:obj:`duckietown_msgs.msg.SegmentList`): A list of the detected segments. Each segment is an :obj:`duckietown_msgs.msg.Segment` message
-        ~debug/segments/compressed (:obj:`sensor_msgs.msg.CompressedImage`): Debug topic with the segments drawn on the input image
-        ~debug/edges/compressed (:obj:`sensor_msgs.msg.CompressedImage`): Debug topic with the Canny edges drawn on the input image
-        ~debug/maps/compressed (:obj:`sensor_msgs.msg.CompressedImage`): Debug topic with the regions falling in each color range drawn on the input image
-        ~debug/ranges_HS (:obj:`sensor_msgs.msg.Image`): Debug topic with a histogram of the colors in the input image and the color ranges, Hue-Saturation projection
-        ~debug/ranges_SV (:obj:`sensor_msgs.msg.Image`): Debug topic with a histogram of the colors in the input image and the color ranges, Saturation-Value projection
-        ~debug/ranges_HV (:obj:`sensor_msgs.msg.Image`): Debug topic with a histogram of the colors in the input image and the color ranges, Hue-Value projection
-
+        api:  An instance of the DataAPI object used to communicate with the RESTful Data API.
+        name: Name of the storage space to connect to.
     """
 
     def __init__(self, api: DataAPI, name: str):
@@ -53,7 +29,17 @@ class Storage(object):
         self._name = name
         self._full_name = BUCKET_NAME.format(name=name)
 
-    def head(self, obj):
+    def head(self, obj: str) -> Dict[str, str]:
+        """
+        Retrieves metadata about the object `obj`.
+
+        Args:
+            obj:    The object to retrieve the metadata for.
+
+        Returns:
+            dict[str, str]:     A key-value mapping containing the metadata.
+
+        """
         if self._name == 'public':
             # anybody can do this
             url = PUBLIC_STORAGE_URL.format(bucket=self._name, object=obj)
@@ -72,7 +58,24 @@ class Storage(object):
         # ---
         return res.headers
 
-    def download(self, source: str, destination: str, force: bool = False):
+    def download(self, source: str, destination: str, force: bool = False) -> TransferHandler:
+        """
+        Downloads a file from the storage space.
+
+        Args:
+            source:         The path to the file to download in the storage space.
+            destination:    The local path the file is downloaded to.
+            force:          Whether the destination file is overwritten in case it exists.
+
+        Returns:
+            TransferHandler:    An handler to the transfer operation.
+
+        Raises:
+            ValueError:                 One of the arguments has an illegal value.
+            FileNotFoundError:          The object was not found in the storage space.
+            dt_data_api.TransferError:  An error occurs while transferring the data from the DCSS.
+
+        """
         parts = self._get_parts(source)
         # check destination
         if os.path.exists(destination):
@@ -132,7 +135,27 @@ class Storage(object):
         # return transfer handler
         return handler
 
-    def upload(self, source: Union[str, bytes, BinaryIO], destination: str, length: int = None):
+    def upload(self, source: Union[str, bytes, BinaryIO], destination: str,
+               length: int = None) -> TransferHandler:
+        """
+        Uploads a file to the storage space.
+
+        Args:
+            source:         `str` - The local path of the file to upload.\n
+                            `bytes` - Content of the file as `bytes` object.\n
+                            `BinaryIO` - A file-like object.
+            destination:    The path to the resulting file in the storage space.
+            length:         (Optional) Length of the data in bytes. Only needed when `source`
+                            is of type `BinaryIO`.
+
+        Returns:
+            TransferHandler:    An handler to the transfer operation.
+
+        Raises:
+            ValueError:                 One of the arguments has an illegal value.
+            dt_data_api.TransferError:  An error occurs while transferring the data to the DCSS.
+
+        """
         if isinstance(source, str):
             file_path = os.path.abspath(source)
             if not os.path.isfile(file_path):
@@ -223,6 +246,16 @@ class Storage(object):
         return handler
 
     def _get_parts(self, obj: str):
+        """
+        Returns a list of parts to download and append together to form the complete file.
+
+        Args:
+            obj:    The path to the object in the storage space.
+
+        Raises:
+            FileNotFoundError:  The object was not found in the storage space.
+
+        """
         modes = [
             (False,          obj, lambda _: obj),
             (True,  obj + '.000', lambda p: obj + f'.{p:03d}'),
@@ -236,7 +269,16 @@ class Storage(object):
                 pass
         raise FileNotFoundError(f"Object '{obj}' not found")
 
-    def _check_token(self, resource=None):
+    def _check_token(self, resource: str = None):
+        """
+        Checks if the token was set inside the DataClient object.
+
+        Args:
+            resource:   (Optional)  A brief description of the service needing the token.
+
+        Raises:
+            ValueError:     The token was not set (i.e., the client is unathenticated).
+        """
         if self._api.token is None:
             resource = 'This resource' if not resource else f'The rosource {resource}'
             raise ValueError(f'{resource} requires a valid token. Initialize the DataClient '

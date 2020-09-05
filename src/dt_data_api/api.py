@@ -1,13 +1,27 @@
 import requests
 
+from typing import Dict
+
 from dt_authentication import DuckietownToken
 from .constants import DATA_API_URL
 from .exceptions import APIError
 
 
 class DataAPI(object):
+    """
+    Provides an interface to the RESTful Data API service. The RESTful Data API service
+    generates signed URLs that allow you to perform operations on files on the DCSS.
 
-    def __init__(self, token):
+    You should not use this class yourself, the DataClient will do it for you.
+
+    Args:
+        token (:obj:`str`): you secret Duckietown Token
+
+    Raises:
+        dt_authentication.InvalidToken: The given token is not valid.
+    """
+
+    def __init__(self, token: str):
         # validate the token
         if token is not None:
             DuckietownToken.from_string(token)
@@ -16,9 +30,28 @@ class DataAPI(object):
 
     @property
     def token(self):
+        """ The given token """
         return self._token
 
-    def authorize_request(self, action, bucket, obj, headers=None):
+    def authorize_request(self,
+                          action: str, bucket: str, obj: str, headers: Dict[str, str] = None):
+        """
+        Authorizes the request to perform a given ``action`` on a given object ``obj``
+        in the storage space ``bucket``.
+
+        Args:
+            action (:obj:`str`):        Action to perform on the object. Allowed values are listed
+                                        `here <https://docs.aws.amazon.com/AmazonS3/latest/API/
+                                        API_Operations_Amazon_Simple_Storage_Service.html>`_.
+
+            bucket (:obj:`str`):        Name of the target storage space (e.g., ``public``).
+
+            obj (:obj:`str`):           Path to the file to perform the action on.
+
+            headers (:obj:`dict`):      Dictionary containing extra headers that will be sent
+                                        together with the action request once the signed URL is
+                                        generated.
+        """
         api_url = DATA_API_URL.format(action=action, bucket=bucket, object=obj)
         api_headers = {
             'X-Duckietown-Token': self._token
