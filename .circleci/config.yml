@@ -34,10 +34,6 @@ jobs:
             python setup.py develop --prefix ~/.local --no-deps
 
       - run:
-          name: Make docs
-          command: |
-            make docs
-      - run:
           name: Notebooks
           command: |
             make -C notebooks cleanup all
@@ -59,6 +55,10 @@ jobs:
             make coverage-report
             coverage xml
 
+      - run:
+          name: Make docs
+          command: |
+            make docs
 
       - store_artifacts:
           when: always
