@@ -28,6 +28,7 @@ def get_version_from_source(filename):
         raise ValueError(filename)
     return version
 
+
 version = get_version_from_source('src/dt_data_api/__init__.py')
 
 # read project dependencies
