@@ -4,7 +4,7 @@ from setuptools import find_packages, setup
 # The package name is the name on PyPI
 # it is not the python module names.
 distro = 'daffy'
-package_name = 'dt-{}-data-api'.format(distro)
+package_name = 'dt-data-api-{}'.format(distro)
 library_webpage = 'http://github.com/duckietown/lib-dt-data-api'
 maintainer = 'Andrea F. Daniele'
 maintainer_email = 'afdaniele@ttic.edu'
