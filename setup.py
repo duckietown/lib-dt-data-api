@@ -41,7 +41,7 @@ version = get_version_from_source('src/dt_data_api/__init__.py')
 
 install_requires = [
     'requests',
-    'dt-daffy-authentication'
+    'dt-authentication-{}'.format(distro)
 ]
 tests_require = []
 
