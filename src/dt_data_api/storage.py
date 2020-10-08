@@ -284,6 +284,8 @@ class Storage(object):
                     handler.set_status(TransferStatus.ERROR, res.text)
                     logger.debug(f'Transfer Error: Code: {res.status_code} Message: {res.text}')
                     return
+                # set status to FINISHED
+                handler.set_status(TransferStatus.FINISHED, 'Finished')
 
         # create a worker
         worker_th = WorkerThread(job)
