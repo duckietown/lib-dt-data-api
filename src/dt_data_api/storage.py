@@ -2,6 +2,7 @@ import os
 import io
 from typing import Union, BinaryIO, Dict
 import requests
+from dt_authentication import DuckietownToken
 
 from . import logger
 from .api import DataAPI
@@ -200,6 +201,13 @@ class Storage(object):
         else:
             raise ValueError(f'Source object must be either a string (file path), a bytes object '
                              f'or a binary stream, got {str(type(source))} instead.')
+        # prepare owner information
+        owner = {
+            'id': '0'
+        }
+        if self._api.token is not None:
+            token = DuckietownToken.from_string(self._api.token)
+            owner['id'] = str(token.uid)
         # ---
         # create a multipart handler
         parts = MultipartBytesIO(source, source_len)
@@ -234,7 +242,8 @@ class Storage(object):
                 progress.update(part=part + 1)
                 # round up metadata
                 metadata = {
-                    'x-amz-meta-number-of-parts': str(num_parts)
+                    'x-amz-meta-number-of-parts': str(num_parts),
+                    **{f'x-amz-meta-owner-{k}': v for k, v in owner.items()}
                 }
                 # authorize request
                 self._check_token(f'Storage[{self._name}].upload(...)')
