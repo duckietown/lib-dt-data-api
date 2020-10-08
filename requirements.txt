@@ -26,4 +26,4 @@ jupyter
 
 # library deps
 requests
-dt-authentication
+dt-authentication-daffy
