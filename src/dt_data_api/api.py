@@ -33,8 +33,7 @@ class DataAPI(object):
         """ The given token """
         return self._token
 
-    def authorize_request(self,
-                          action: str, bucket: str, obj: str, headers: Dict[str, str] = None):
+    def authorize_request(self, action: str, bucket: str, obj: str, headers: Dict[str, str] = None):
         """
         Authorizes the request to perform a given ``action`` on a given object ``obj``
         in the storage space ``bucket``.
@@ -53,18 +52,16 @@ class DataAPI(object):
                                         generated.
         """
         api_url = DATA_API_URL.format(action=action, bucket=bucket, object=obj)
-        api_headers = {
-            'X-Duckietown-Token': self._token
-        }
+        api_headers = {"X-Duckietown-Token": self._token}
         if headers is not None:
             api_headers.update(headers)
         # request authorization
         res = requests.get(api_url, headers=api_headers)
         if res.status_code != 200:
-            raise APIError(f'API Error: Code: {res.status_code} Message: {res.text}')
+            raise APIError(f"API Error: Code: {res.status_code} Message: {res.text}")
         # parse answer
         answer = res.json()
-        if answer['code'] != 200:
+        if answer["code"] != 200:
             raise APIError(f'API Error: Code: {answer["code"]} Message: {answer["message"]}')
         # get signed url
-        return answer['data']['url']
+        return answer["data"]["url"]

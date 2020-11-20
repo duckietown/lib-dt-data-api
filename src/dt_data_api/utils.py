@@ -24,7 +24,7 @@ class WorkerThread(Thread):
         super(WorkerThread, self).__init__(*args, **kwargs)
         self._job = job
         self._is_shutdown = False
-        setattr(self, 'run', partial(self._job, worker=self))
+        setattr(self, "run", partial(self._job, worker=self))
 
     @property
     def is_shutdown(self) -> bool:
@@ -155,8 +155,7 @@ class TransferProgress:
         if callback in self._callbacks:
             self._callbacks.remove(callback)
 
-    def update(self, total: int = None, transferred: int = None,
-               part: int = None, parts: int = None):
+    def update(self, total: int = None, transferred: int = None, part: int = None, parts: int = None):
         """
         Updates the internal state of the object.
 
@@ -201,14 +200,16 @@ class TransferProgress:
         """
         Stringifies the object.
         """
-        return str({
-            'total': self._total,
-            'transferred': self._transferred,
-            'speed': self._speed,
-            'percentage': self._percentage,
-            'part': self._part,
-            'parts': self._parts
-        })
+        return str(
+            {
+                "total": self._total,
+                "transferred": self._transferred,
+                "speed": self._speed,
+                "percentage": self._percentage,
+                "part": self._part,
+                "parts": self._parts,
+            }
+        )
 
 
 class TransferHandler:
@@ -222,7 +223,7 @@ class TransferHandler:
     def __init__(self, progress: TransferProgress):
         self._progress = progress
         self._status = TransferStatus.UNKNOWN
-        self._reason = '(none)'
+        self._reason = "(none)"
         self._workers = set()
         self._callbacks = set()
         # register the transfer handler as a progress callback
@@ -244,8 +245,9 @@ class TransferHandler:
             new_status: New status.
         """
         if not isinstance(new_status, TransferStatus):
-            raise ValueError(f'Expected `new_status` of type `TransferStatus`. '
-                             f'Got `{str(type(new_status))}` instead.')
+            raise ValueError(
+                f"Expected `new_status` of type `TransferStatus`. " f"Got `{str(type(new_status))}` instead."
+            )
         self._status = new_status
 
     @property
@@ -455,8 +457,12 @@ class MonitoredIOIterator:
         worker:     Instance of :py:class:`WorkerThread` performing the transfer job.
     """
 
-    def __init__(self, progress: TransferProgress, iterator: Union[None, Iterator[bytes]] = None,
-                 worker: Union[None, WorkerThread] = None):
+    def __init__(
+        self,
+        progress: TransferProgress,
+        iterator: Union[None, Iterator[bytes]] = None,
+        worker: Union[None, WorkerThread] = None,
+    ):
         self._progress = progress
         self._iterator = iterator
         self._worker = worker

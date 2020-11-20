@@ -6,8 +6,15 @@ from dt_authentication import DuckietownToken
 
 from . import logger
 from .api import DataAPI
-from .utils import IterableIO, MonitoredIOIterator, MultipartBytesIO, TransferProgress, \
-    WorkerThread, TransferHandler, TransferStatus
+from .utils import (
+    IterableIO,
+    MonitoredIOIterator,
+    MultipartBytesIO,
+    TransferProgress,
+    WorkerThread,
+    TransferHandler,
+    TransferStatus,
+)
 from .constants import BUCKET_NAME, PUBLIC_STORAGE_URL, TRANSFER_BUF_SIZE_B
 from .exceptions import TransferError, TransferAborted, APIError
 
@@ -41,13 +48,13 @@ class Storage(object):
             dict[str, str]:     A key-value mapping containing the metadata.
 
         """
-        if self._name == 'public':
+        if self._name == "public":
             # anybody can do this
             url = PUBLIC_STORAGE_URL.format(bucket=self._name, object=obj)
         else:
             # you need permission for this, authorize request
-            self._check_token(f'Storage[{self._name}].head(...)')
-            url = self._api.authorize_request('head_object', self._full_name, obj)
+            self._check_token(f"Storage[{self._name}].head(...)")
+            url = self._api.authorize_request("head_object", self._full_name, obj)
         # send request
         try:
             res = requests.head(url)
@@ -83,16 +90,18 @@ class Storage(object):
             if os.path.isdir(destination):
                 raise ValueError(f"The path '{destination}' already exists and is a directory.")
             if not force:
-                raise ValueError(f"The destination file '{destination}' already exists. Use "
-                                 f"`force=True` to overwrite it.")
+                raise ValueError(
+                    f"The destination file '{destination}' already exists. Use "
+                    f"`force=True` to overwrite it."
+                )
         # get parts metadata
         metas = [self.head(part) for part in parts]
-        obj_length = sum([int(r['Content-Length']) for r in metas])
+        obj_length = sum([int(r["Content-Length"]) for r in metas])
         # create a transfer handler
         progress = TransferProgress(obj_length, parts=len(parts))
         handler = TransferHandler(progress)
         # set status to READY
-        handler.set_status(TransferStatus.READY, 'Worker created')
+        handler.set_status(TransferStatus.READY, "Worker created")
 
         # clean up job
         def clean_up():
@@ -102,16 +111,16 @@ class Storage(object):
         # define downloading job
         def job(worker: WorkerThread, *_, **__):
             # set status to ACTIVE
-            handler.set_status(TransferStatus.ACTIVE, 'Worker started')
+            handler.set_status(TransferStatus.ACTIVE, "Worker started")
             # open destination
-            with open(destination, 'wb') as fout:
+            with open(destination, "wb") as fout:
                 # download parts
                 for i, part in enumerate(parts):
                     # check worker
                     if worker.is_shutdown:
-                        logger.debug('Transfer aborted!')
+                        logger.debug("Transfer aborted!")
                         # set status to STOPPED
-                        handler.set_status(TransferStatus.STOPPED, 'Worker was stopped')
+                        handler.set_status(TransferStatus.STOPPED, "Worker was stopped")
                         # clean up partial files
                         clean_up()
                         # tell the server we are done
@@ -122,14 +131,14 @@ class Storage(object):
                     # update progress
                     progress.update(part=i + 1)
                     # get url to part
-                    if self._name == 'public':
+                    if self._name == "public":
                         # anybody can do this
                         url = PUBLIC_STORAGE_URL.format(bucket=self._name, object=part)
                     else:
                         # you need permission for this, authorize request
-                        self._check_token(f'Storage[{self._name}].download(...)')
+                        self._check_token(f"Storage[{self._name}].download(...)")
                         try:
-                            url = self._api.authorize_request('get_object', self._full_name, part)
+                            url = self._api.authorize_request("get_object", self._full_name, part)
                         except APIError as e:
                             # set status to ERROR
                             handler.set_status(TransferStatus.ERROR, str(e))
@@ -140,9 +149,9 @@ class Storage(object):
                     for chunk in res.iter_content(TRANSFER_BUF_SIZE_B):
                         # check worker
                         if worker.is_shutdown:
-                            logger.debug('Transfer aborted!')
+                            logger.debug("Transfer aborted!")
                             # set status to STOPPED
-                            handler.set_status(TransferStatus.STOPPED, 'Worker was stopped')
+                            handler.set_status(TransferStatus.STOPPED, "Worker was stopped")
                             # clean up partial files
                             clean_up()
                             # tell the server we are done
@@ -163,8 +172,9 @@ class Storage(object):
         # return transfer handler
         return handler
 
-    def upload(self, source: Union[str, bytes, BinaryIO], destination: str,
-               length: int = None) -> TransferHandler:
+    def upload(
+        self, source: Union[str, bytes, BinaryIO], destination: str, length: int = None
+    ) -> TransferHandler:
         """
         Uploads a file to the storage space.
 
@@ -187,27 +197,29 @@ class Storage(object):
         if isinstance(source, str):
             file_path = os.path.abspath(source)
             if not os.path.isfile(file_path):
-                raise ValueError(f'The file {file_path} does not exist.')
-            source = open(file_path, 'rb')
+                raise ValueError(f"The file {file_path} does not exist.")
+            source = open(file_path, "rb")
             source_len = os.path.getsize(file_path)
         elif isinstance(source, bytes):
             source_len = len(source)
             source = io.BytesIO(source)
         elif isinstance(source, io.RawIOBase):
             if length is None or 0 < length:
-                raise ValueError('When `source` is a file-like object, the stream `length` '
-                                 'must be explicitly provided (as number of bytes).')
+                raise ValueError(
+                    "When `source` is a file-like object, the stream `length` "
+                    "must be explicitly provided (as number of bytes)."
+                )
             source_len = length
         else:
-            raise ValueError(f'Source object must be either a string (file path), a bytes object '
-                             f'or a binary stream, got {str(type(source))} instead.')
+            raise ValueError(
+                f"Source object must be either a string (file path), a bytes object "
+                f"or a binary stream, got {str(type(source))} instead."
+            )
         # prepare owner information
-        owner = {
-            'id': '0'
-        }
+        owner = {"id": "0"}
         if self._api.token is not None:
             token = DuckietownToken.from_string(self._api.token)
-            owner['id'] = str(token.uid)
+            owner["id"] = str(token.uid)
         # ---
         # create a multipart handler
         parts = MultipartBytesIO(source, source_len)
@@ -219,21 +231,20 @@ class Storage(object):
         # create a monitored iterator
         monitor = MonitoredIOIterator(progress)
         # sanitize destination
-        destination = destination.lstrip('/')
+        destination = destination.lstrip("/")
         # create destination format
-        destination_fmt = lambda p: \
-            destination + (f'.{p:03d}' if num_parts > 1 else '')
+        destination_fmt = lambda p: destination + (f".{p:03d}" if num_parts > 1 else "")
         # set status to READY
-        handler.set_status(TransferStatus.READY, 'Worker created')
+        handler.set_status(TransferStatus.READY, "Worker created")
 
         # define uploading job
         def job(worker: WorkerThread, *_, **__):
             # set status to ACTIVE
-            handler.set_status(TransferStatus.ACTIVE, 'Worker started')
+            handler.set_status(TransferStatus.ACTIVE, "Worker started")
             # iterate over the parts
             for part, (stream_len, stream) in enumerate(parts):
                 if worker.is_shutdown:
-                    logger.debug('Transfer aborted!')
+                    logger.debug("Transfer aborted!")
                     return
                 # ---
                 dest_part = destination_fmt(part)
@@ -242,24 +253,25 @@ class Storage(object):
                 progress.update(part=part + 1)
                 # round up metadata
                 metadata = {
-                    'x-amz-meta-number-of-parts': str(num_parts),
-                    **{f'x-amz-meta-owner-{k}': v for k, v in owner.items()}
+                    "x-amz-meta-number-of-parts": str(num_parts),
+                    **{f"x-amz-meta-owner-{k}": v for k, v in owner.items()},
                 }
                 # authorize request
-                self._check_token(f'Storage[{self._name}].upload(...)')
+                self._check_token(f"Storage[{self._name}].upload(...)")
                 try:
                     url = self._api.authorize_request(
-                        'put_object', self._full_name, dest_part, headers=metadata)
+                        "put_object", self._full_name, dest_part, headers=metadata
+                    )
                 except APIError as e:
                     # set status to ERROR
                     handler.set_status(TransferStatus.ERROR, str(e))
                     return
                 # prepare request
-                req = requests.Request('PUT', url, data=monitor).prepare()
+                req = requests.Request("PUT", url, data=monitor).prepare()
                 # remove header 'Transfer-Encoding'
-                del req.headers['Transfer-Encoding']
+                del req.headers["Transfer-Encoding"]
                 # add header 'Content-Length'
-                req.headers['Content-Length'] = stream_len
+                req.headers["Content-Length"] = stream_len
                 # add metadata
                 req.headers.update(metadata)
                 # send request
@@ -271,21 +283,21 @@ class Storage(object):
                 except requests.exceptions.ConnectionError as e:
                     # set status to ERROR
                     handler.set_status(TransferStatus.ERROR, str(e))
-                    logger.debug(f'ERROR: {str(e)}')
+                    logger.debug(f"ERROR: {str(e)}")
                     return
                 except TransferAborted:
                     # set status to ERROR
-                    handler.set_status(TransferStatus.STOPPED, 'Worker was stopped')
-                    logger.debug('Worker was stopped!')
+                    handler.set_status(TransferStatus.STOPPED, "Worker was stopped")
+                    logger.debug("Worker was stopped!")
                     return
                 # parse response
                 if res.status_code != 200:
                     # set status to ERROR
                     handler.set_status(TransferStatus.ERROR, res.text)
-                    logger.debug(f'Transfer Error: Code: {res.status_code} Message: {res.text}')
+                    logger.debug(f"Transfer Error: Code: {res.status_code} Message: {res.text}")
                     return
                 # set status to FINISHED
-                handler.set_status(TransferStatus.FINISHED, 'Finished')
+                handler.set_status(TransferStatus.FINISHED, "Finished")
 
         # create a worker
         worker_th = WorkerThread(job)
@@ -311,13 +323,13 @@ class Storage(object):
 
         """
         modes = [
-            (False,          obj, lambda _: obj),
-            (True,  obj + '.000', lambda p: obj + f'.{p:03d}'),
+            (False, obj, lambda _: obj),
+            (True, obj + ".000", lambda p: obj + f".{p:03d}"),
         ]
         for multipart, source, part_name in modes:
             try:
                 res = self.head(source)
-                parts = int(res.get('x-amz-meta-number-of-parts', '1'))
+                parts = int(res.get("x-amz-meta-number-of-parts", "1"))
                 return [obj] if not multipart else [part_name(p) for p in range(parts)]
             except FileNotFoundError:
                 pass
@@ -334,6 +346,8 @@ class Storage(object):
             ValueError:     The token was not set (i.e., the client is unathenticated).
         """
         if self._api.token is None:
-            resource = 'This resource' if not resource else f'The rosource {resource}'
-            raise ValueError(f'{resource} requires a valid token. Initialize the DataClient '
-                             f'object with the `token` argument set.')
+            resource = "This resource" if not resource else f"The rosource {resource}"
+            raise ValueError(
+                f"{resource} requires a valid token. Initialize the DataClient "
+                f"object with the `token` argument set."
+            )

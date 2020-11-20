@@ -3,12 +3,12 @@ from setuptools import find_packages, setup
 # :==> Fill in your project data here
 # The package name is the name on PyPI
 # it is not the python module names.
-distro = 'daffy'
-package_name = 'dt-data-api-{}'.format(distro)
-library_webpage = 'http://github.com/duckietown/lib-dt-data-api'
-maintainer = 'Andrea F. Daniele'
-maintainer_email = 'afdaniele@ttic.edu'
-short_description = 'Data API client library for Duckietown Cloud Storage'
+distro = "daffy"
+package_name = "dt-data-api-{}".format(distro)
+library_webpage = "http://github.com/duckietown/lib-dt-data-api"
+maintainer = "Andrea F. Daniele"
+maintainer_email = "afdaniele@ttic.edu"
+short_description = "Data API client library for Duckietown Cloud Storage"
 full_description = """
 Data API client library for Duckietown cloud storage.
 """
@@ -30,7 +30,7 @@ def get_version_from_source(filename):
     return version
 
 
-version = get_version_from_source('src/dt_data_api/__init__.py')
+version = get_version_from_source("src/dt_data_api/__init__.py")
 
 # read project dependencies
 # NO - dependencies.txt is for testing dependencies - EVERYTHING PINNED
@@ -39,20 +39,19 @@ version = get_version_from_source('src/dt_data_api/__init__.py')
 # with open(dependencies_file, 'rt') as fin:
 #     dependencies = list(filter(lambda line: not line.startswith('#'), fin.read().splitlines()))
 
-install_requires = [
-    'requests',
-    'dt-authentication-{}'.format(distro)
-]
+install_requires = ["requests", "dt-authentication-{}".format(distro)]
 tests_require = []
 
 # compile description
-underline = '=' * (len(package_name) + len(short_description) + 2)
+underline = "=" * (len(package_name) + len(short_description) + 2)
 description = """
 {name}: {short}
 {underline}
 
 {long}
-""".format(name=package_name, short=short_description, long=full_description, underline=underline)
+""".format(
+    name=package_name, short=short_description, long=full_description, underline=underline
+)
 
 console_scripts = []
 # setup package
@@ -64,7 +63,7 @@ setup(
     tests_require=tests_require,
     install_requires=install_requires,
     package_dir={"": "src"},
-    packages=find_packages('./src'),
+    packages=find_packages("./src"),
     long_description=description,
     version=version,
     entry_points={"console_scripts": console_scripts},

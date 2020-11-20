@@ -8,13 +8,13 @@ from .exceptions import APIError, TransferError
 from dt_authentication import InvalidToken
 
 __all__ = [
-    'logger',
-    'DataClient',
-    'Storage',
-    'TransferStatus',
-    'TransferProgress',
-    'TransferHandler',
-    'APIError',
-    'TransferError',
-    'InvalidToken'
+    "logger",
+    "DataClient",
+    "Storage",
+    "TransferStatus",
+    "TransferProgress",
+    "TransferHandler",
+    "APIError",
+    "TransferError",
+    "InvalidToken",
 ]

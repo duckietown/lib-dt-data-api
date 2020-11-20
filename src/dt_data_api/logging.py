@@ -4,6 +4,4 @@ logging.basicConfig()
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
-__all__ = [
-    'logger'
-]
+__all__ = ["logger"]
