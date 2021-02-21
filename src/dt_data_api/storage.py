@@ -1,7 +1,10 @@
 import os
 import io
-from typing import Union, BinaryIO, Dict
 import requests
+from bs4 import BeautifulSoup
+
+from typing import Union, BinaryIO, Dict, List
+
 from dt_authentication import DuckietownToken
 
 from . import logger
@@ -28,14 +31,43 @@ class Storage(object):
         :py:meth:`dt_data_api.DataClient.storage` instead.
 
     Args:
-        api:  An instance of the DataAPI object used to communicate with the RESTful Data API.
-        name: Name of the storage space to connect to.
+        api:    An instance of :py:class:`dt_data_api.api.DataAPI` used to communicate with the
+                RESTful Data API.
+        name:   Name of the storage space to connect to.
     """
 
     def __init__(self, api: DataAPI, name: str):
         self._api = api
         self._name = name
         self._full_name = BUCKET_NAME.format(name=name)
+
+    def list_objects(self, prefix: str) -> List[str]:
+        """
+        Lists objects starting with a given prefix.
+
+        Args:
+            prefix:         The path prefix to start listing from.
+
+        Returns:
+            list[str]:      A list of keys identifying the objects.
+
+        """
+        prefix = self._sanitize_remote_path(prefix)
+        # authorize request
+        self._check_token(f"Storage[{self._name}].list_objects_v2(...)")
+        url = self._api.authorize_request("list_objects_v2", self._full_name, prefix)
+        # send request
+        try:
+            res = requests.get(url)
+        except requests.exceptions.ConnectionError as e:
+            raise TransferError(e)
+        # parse output
+        items = []
+        soup = BeautifulSoup(res.text, 'xml')
+        for item in soup.find_all('Contents'):
+            items.append(item.Key.text)
+        # ---
+        return items
 
     def head(self, obj: str) -> Dict[str, str]:
         """
@@ -84,6 +116,7 @@ class Storage(object):
             dt_data_api.TransferError:  An error occurs while transferring the data from the DCSS.
 
         """
+        source = self._sanitize_remote_path(source)
         parts = self._get_parts(source)
         # check destination
         if os.path.exists(destination):
@@ -231,7 +264,7 @@ class Storage(object):
         # create a monitored iterator
         monitor = MonitoredIOIterator(progress)
         # sanitize destination
-        destination = destination.lstrip("/")
+        destination = self._sanitize_remote_path(destination)
         # create destination format
         destination_fmt = lambda p: destination + (f".{p:03d}" if num_parts > 1 else "")
         # set status to READY
@@ -311,6 +344,18 @@ class Storage(object):
         # return transfer handler
         return handler
 
+    def _sanitize_remote_path(self, path: str) -> str:
+        """
+        Sanitizes a remote path for this storage space.
+
+        Args:
+            path:           `str` - Path to sanitize.
+
+        Returns:
+            str:            Sanitized path.
+        """
+        return path.lstrip("/")
+
     def _get_parts(self, obj: str):
         """
         Returns a list of parts to download and append together to form the complete file.
@@ -351,3 +396,39 @@ class Storage(object):
                 f"{resource} requires a valid token. Initialize the DataClient "
                 f"object with the `token` argument set."
             )
+
+
+class UserStorage(Storage):
+    """
+    Provides an interface to a user's private space on the DCSS.
+
+    .. warning::
+        You should not create instances of this class yourself. Use the method
+        :py:meth:`dt_data_api.DataClient.storage` and pass the argument `"user"` instead.
+
+    Args:
+        api:            An instance of DataAPI used to communicate with the RESTful Data API.
+        name:           Name of the storage space to connect to.
+        impersonate:
+    """
+
+    def __init__(self, api: DataAPI, name: str, impersonate: Union[None, int] = None):
+        super().__init__(api, name)
+        self._impersonate = impersonate
+
+    def _sanitize_remote_path(self, path: str) -> str:
+        """
+        Sanitizes a remote path for this storage space.
+
+        Args:
+            path:           `str` - Path to sanitize.
+
+        Returns:
+            str:            Sanitized path.
+        """
+        path = super(UserStorage, self)._sanitize_remote_path(path)
+        uid = self._impersonate or self._api.uid
+        user_dir = f"{uid}/"
+        if not path.startswith(user_dir):
+            path = os.path.join(user_dir, path)
+        return path

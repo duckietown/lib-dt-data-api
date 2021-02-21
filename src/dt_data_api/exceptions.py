@@ -1,3 +1,11 @@
+class ConfigurationError(BaseException):
+    """
+    Client configuration error.
+    """
+
+    pass
+
+
 class APIError(BaseException):
     """
     Error while talking to the RESTful Data API endpoints.

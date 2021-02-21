@@ -22,14 +22,20 @@ class DataAPI(object):
     """
 
     def __init__(self, token: str):
+        self._uid = None
         # validate the token
         if token is not None:
-            DuckietownToken.from_string(token)
+            self._uid = DuckietownToken.from_string(token).uid
         # store the raw token
         self._token = token
 
     @property
-    def token(self):
+    def uid(self) -> int:
+        """ The user ID corresponding to the given token """
+        return self._uid
+
+    @property
+    def token(self) -> str:
         """ The given token """
         return self._token
 

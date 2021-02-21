@@ -115,21 +115,25 @@ storage space.
 Monitor the transfer
 --------------------
 
-Every time you execute an upload/download action on an object, an object of type
-:py:class:`dt_data_api.TransferHandler` is returned to you.
-This object lets you monitor and control the transfer operation.
+Every time you execute an upload/download action throw the methods
+:py:meth:`dt_data_api.Storage.download` and :py:meth:`dt_data_api.Storage.upload`,
+an object of type :py:class:`dt_data_api.TransferHandler` is returned right away.
+The call is by default non-blocking.
+This object lets you monitor and control the transfer.
 
-For example, if you want to print out the progress of your transfer,
+For example, if you want to print out the progress of your transfer, you
+can create a simple callback as follows,
 
 .. code-block:: python
 
     def cb(handler):
         print(f'{handler.progress.percentage}%')
 
-    h = storage.upload('./my_file.txt', 'my_dir/my_file.txt')
-    h.register_callback(cb)
+    transfer = storage.upload('./my_file.txt', 'my_dir/my_file.txt')
+    transfer.register_callback(cb)
 
 
+The callback will be called every time there is an update in the transfer status.
 The snippet above will produce the following output,
 
 .. code-block:: bash

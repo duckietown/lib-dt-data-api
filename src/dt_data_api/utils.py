@@ -322,7 +322,7 @@ class TransferHandler:
 
     def join(self):
         """
-        Waits for the operation to complete.
+        Blocks until the operation is completed.
         """
         for worker in self._workers:
             # noinspection PyBroadException
