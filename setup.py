@@ -39,7 +39,7 @@ version = get_version_from_source("src/dt_data_api/__init__.py")
 # with open(dependencies_file, 'rt') as fin:
 #     dependencies = list(filter(lambda line: not line.startswith('#'), fin.read().splitlines()))
 
-install_requires = ["requests", "dt-authentication-{}".format(distro)]
+install_requires = ["requests", "beautifulsoup4", "lxml", "dt-authentication-{}".format(distro)]
 tests_require = []
 
 # compile description
