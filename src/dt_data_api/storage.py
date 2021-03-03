@@ -41,6 +41,11 @@ class Storage(object):
         self._name = name
         self._full_name = BUCKET_NAME.format(name=name)
 
+    @property
+    def api(self) -> DataAPI:
+        """ The low-level API object used to communicate with the DCSS """
+        return self._api
+
     def list_objects(self, prefix: str) -> List[str]:
         """
         Lists objects starting with a given prefix.
@@ -50,6 +55,10 @@ class Storage(object):
 
         Returns:
             list[str]:      A list of keys identifying the objects.
+
+        Raises:
+            dt_data_api.TransferError:  An error occurs while transferring the data from the DCSS.
+            dt_data_api.APIError:       An error occurs while communicating with the DCSS.
 
         """
         prefix = self._sanitize_remote_path(prefix)
@@ -79,6 +88,11 @@ class Storage(object):
         Returns:
             dict[str, str]:     A key-value mapping containing the metadata.
 
+        Raises:
+            FileNotFoundError:          The object was not found in the storage space.
+            dt_data_api.TransferError:  An error occurs while transferring the data from the DCSS.
+            dt_data_api.APIError:       An error occurs while communicating with the DCSS.
+
         """
         if self._name == "public":
             # anybody can do this
@@ -96,7 +110,7 @@ class Storage(object):
         if res.status_code == 404:
             raise FileNotFoundError(f"Object '{obj}' not found")
         # ---
-        return res.headers
+        return dict(res.headers)
 
     def download(self, source: str, destination: str, force: bool = False) -> TransferHandler:
         """

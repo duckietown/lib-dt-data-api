@@ -56,6 +56,9 @@ class DataAPI(object):
             headers (:obj:`dict`):      Dictionary containing extra headers that will be sent
                                         together with the action request once the signed URL is
                                         generated.
+
+        Raises:
+            dt_data_api.APIError:       An error occurs while communicating with the DCSS.
         """
         api_url = DATA_API_URL.format(action=action, bucket=bucket, object=obj)
         api_headers = {"X-Duckietown-Token": self._token}
