@@ -94,6 +94,7 @@ class Storage(object):
             dt_data_api.APIError:       An error occurs while communicating with the DCSS.
 
         """
+        obj = self._sanitize_remote_path(obj)
         if self._name == "public":
             # anybody can do this
             url = PUBLIC_STORAGE_URL.format(bucket=self._name, object=obj)
