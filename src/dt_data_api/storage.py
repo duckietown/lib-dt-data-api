@@ -406,7 +406,7 @@ class Storage(object):
             ValueError:     The token was not set (i.e., the client is unathenticated).
         """
         if self._api.token is None:
-            resource = "This resource" if not resource else f"The rosource {resource}"
+            resource = "This resource" if not resource else f"The resource {resource}"
             raise ValueError(
                 f"{resource} requires a valid token. Initialize the DataClient "
                 f"object with the `token` argument set."
