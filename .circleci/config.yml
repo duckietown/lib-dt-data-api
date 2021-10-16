@@ -34,11 +34,6 @@ jobs:
             python setup.py develop --prefix ~/.local --no-deps
 
       - run:
-          name: Notebooks
-          command: |
-            make -C notebooks cleanup all
-
-      - run:
           name: Run tests
           command: |
             make test
