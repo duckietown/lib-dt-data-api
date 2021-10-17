@@ -9,12 +9,12 @@ workflows:
         context: pip-staging
         filters:
           branches:
-            only: /daffy-staging.*/
+            only: /master-staging.*/
     - test-3.8-daffy-prod:
         context: production
         filters:
           branches:
-            ignore: /daffy-staging.*/
+            ignore: /master-staging.*/
 jobs:
   test-3.8-daffy-stage:
     environment:
@@ -272,5 +272,3 @@ jobs:
         command: |
           bash <(curl -s https://codecov.io/bash)
     resource_class: medium
-
-# sigil 7a3be35b170b64a0e28c7d6e79b981a7
