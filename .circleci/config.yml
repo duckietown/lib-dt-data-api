@@ -24,7 +24,7 @@ jobs:
       COVER_PACKAGES: dt_data_api,dt_data_api_tests
       TEST_PACKAGES: dt_data_api_tests
     docker:
-    - image: $DOCKER_REGISTRY/circleci/python:3.8
+    - image: circleci/python:3.8
       auth:
         username: $DOCKER_USERNAME
         password: $DOCKER_PASSWORD
@@ -152,7 +152,7 @@ jobs:
       COVER_PACKAGES: dt_data_api,dt_data_api_tests
       TEST_PACKAGES: dt_data_api_tests
     docker:
-    - image: $DOCKER_REGISTRY/circleci/python:3.8
+    - image: circleci/python:3.8
       auth:
         username: $DOCKER_USERNAME
         password: $DOCKER_PASSWORD
