@@ -19,7 +19,8 @@ from .utils import (
     WorkerThread,
     TransferHandler,
     TransferStatus,
-    BytesBuffer)
+    BytesBuffer,
+)
 from .constants import BUCKET_NAME, PUBLIC_STORAGE_URL, TRANSFER_BUF_SIZE_B
 from .exceptions import TransferError, TransferAborted, APIError
 
@@ -45,7 +46,7 @@ class Storage(object):
 
     @property
     def api(self) -> DataAPI:
-        """ The low-level API object used to communicate with the DCSS """
+        """The low-level API object used to communicate with the DCSS"""
         return self._api
 
     def list_objects(self, prefix: str) -> List[str]:
@@ -74,8 +75,8 @@ class Storage(object):
             raise TransferError(e)
         # parse output
         items = []
-        soup = BeautifulSoup(res.text, 'xml')
-        for item in soup.find_all('Contents'):
+        soup = BeautifulSoup(res.text, "xml")
+        for item in soup.find_all("Contents"):
             items.append(item.Key.text)
         # ---
         return items
@@ -115,8 +116,9 @@ class Storage(object):
         # ---
         return dict(res.headers)
 
-    def download(self, source: str, destination: Optional[str] = None,
-                 force: bool = False) -> TransferHandler:
+    def download(
+        self, source: str, destination: Optional[str] = None, force: bool = False
+    ) -> TransferHandler:
         """
         Downloads a file from the storage space.
 

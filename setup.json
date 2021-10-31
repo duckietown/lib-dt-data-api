@@ -1,0 +1,23 @@
+{
+  "install_requires": [
+    "beautifulsoup4",
+    "dt-authentication-daffy",
+    "lxml",
+    "requests"
+  ],
+  "tests_require": [],
+  "srcdir": "src",
+  "package_name": "dt-data-api-daffy",
+  "entry_points": {
+    "console_scripts": []
+  },
+  "zip_safe": true,
+  "include_package_data": true,
+  "modules": [
+    "dt_data_api"
+  ],
+  "version": "0.1.12",
+  "author": "",
+  "author_email": "",
+  "url": ""
+}
