@@ -31,12 +31,12 @@ class DataAPI(object):
 
     @property
     def uid(self) -> int:
-        """ The user ID corresponding to the given token """
+        """The user ID corresponding to the given token"""
         return self._uid
 
     @property
     def token(self) -> str:
-        """ The given token """
+        """The given token"""
         return self._token
 
     def authorize_request(self, action: str, bucket: str, obj: str, headers: Dict[str, str] = None):
