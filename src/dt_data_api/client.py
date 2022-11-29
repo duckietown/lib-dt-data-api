@@ -43,13 +43,17 @@ class DataClient(object):
         # handle special case of `user` storage space
         if name == "user":
             if self._api.uid is None:
-                raise ConfigurationError("The 'user' storage space can only be created from an "
-                                         "authenticated client. Please, pass a Duckietown token "
-                                         "while creating the 'DataClient' object.")
+                raise ConfigurationError(
+                    "The 'user' storage space can only be created from an "
+                    "authenticated client. Please, pass a Duckietown token "
+                    "while creating the 'DataClient' object."
+                )
             return UserStorage(self.api, "user", impersonate=impersonate)
         # warn the user when `impersonate` is not used properly
         if impersonate is not None:
-            logger.warning("The argument `impersonate` is taken into account only when accessing "
-                           "the 'user' storage space. It will be ignored.")
+            logger.warning(
+                "The argument `impersonate` is taken into account only when accessing "
+                "the 'user' storage space. It will be ignored."
+            )
         # any other DCSS storage unit
         return Storage(self.api, name)

@@ -1,9 +1,11 @@
 import os
 import io
+from functools import partial
+
 import requests
 from bs4 import BeautifulSoup
 
-from typing import Union, BinaryIO, Dict, List
+from typing import Union, BinaryIO, Dict, List, Optional
 
 from dt_authentication import DuckietownToken
 
@@ -17,6 +19,7 @@ from .utils import (
     WorkerThread,
     TransferHandler,
     TransferStatus,
+    BytesBuffer,
 )
 from .constants import BUCKET_NAME, PUBLIC_STORAGE_URL, TRANSFER_BUF_SIZE_B
 from .exceptions import TransferError, TransferAborted, APIError
@@ -43,7 +46,7 @@ class Storage(object):
 
     @property
     def api(self) -> DataAPI:
-        """ The low-level API object used to communicate with the DCSS """
+        """The low-level API object used to communicate with the DCSS"""
         return self._api
 
     def list_objects(self, prefix: str) -> List[str]:
@@ -62,9 +65,15 @@ class Storage(object):
 
         """
         prefix = self._sanitize_remote_path(prefix)
-        # authorize request
-        self._check_token(f"Storage[{self._name}].list_objects_v2(...)")
-        url = self._api.authorize_request("list_objects_v2", self._full_name, prefix)
+        # public storages are publicly accessible
+        if self._name == "public":
+            # anybody can do this
+            qs = f"?prefix={prefix}"
+            url = PUBLIC_STORAGE_URL.format(bucket=self._name, object=qs)
+        else:
+            # you need permission for this, authorize request
+            self._check_token(f"Storage[{self._name}].list_objects_v2(...)")
+            url = self._api.authorize_request("list_objects_v2", self._full_name, prefix)
         # send request
         try:
             res = requests.get(url)
@@ -72,8 +81,8 @@ class Storage(object):
             raise TransferError(e)
         # parse output
         items = []
-        soup = BeautifulSoup(res.text, 'xml')
-        for item in soup.find_all('Contents'):
+        soup = BeautifulSoup(res.text, "xml")
+        for item in soup.find_all("Contents"):
             items.append(item.Key.text)
         # ---
         return items
@@ -113,7 +122,9 @@ class Storage(object):
         # ---
         return dict(res.headers)
 
-    def download(self, source: str, destination: str, force: bool = False) -> TransferHandler:
+    def download(
+        self, source: str, destination: Optional[str] = None, force: bool = False
+    ) -> TransferHandler:
         """
         Downloads a file from the storage space.
 
@@ -133,8 +144,11 @@ class Storage(object):
         """
         source = self._sanitize_remote_path(source)
         parts = self._get_parts(source)
+        to_disk = isinstance(destination, str)
+        if not to_disk:
+            destination = BytesBuffer()
         # check destination
-        if os.path.exists(destination):
+        if to_disk and os.path.exists(destination):
             if os.path.isdir(destination):
                 raise ValueError(f"The path '{destination}' already exists and is a directory.")
             if not force:
@@ -148,20 +162,26 @@ class Storage(object):
         # create a transfer handler
         progress = TransferProgress(obj_length, parts=len(parts))
         handler = TransferHandler(progress)
+        if not to_disk:
+            handler.buffer = destination
         # set status to READY
         handler.set_status(TransferStatus.READY, "Worker created")
+        # create fp object
+        fp = partial(open, destination, "wb") if to_disk else destination.fp
 
         # clean up job
         def clean_up():
-            if os.path.exists(destination) and os.path.isfile(destination):
+            if to_disk and os.path.exists(destination) and os.path.isfile(destination):
                 os.remove(destination)
+            if not to_disk:
+                destination.truncate(0)
 
         # define downloading job
         def job(worker: WorkerThread, *_, **__):
             # set status to ACTIVE
             handler.set_status(TransferStatus.ACTIVE, "Worker started")
             # open destination
-            with open(destination, "wb") as fout:
+            with fp() as fout:
                 # download parts
                 for i, part in enumerate(parts):
                     # check worker

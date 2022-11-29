@@ -10,6 +10,18 @@ from .constants import MAXIMUM_ALLOWED_SIZE, TRANSFER_BUF_SIZE_B
 from .exceptions import TransferAborted
 
 
+class BytesBuffer(io.BytesIO):
+
+    def fp(self):
+        return self
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        pass
+
+
 class WorkerThread(Thread):
     """
     Worker thread performing a generic `job`.
@@ -155,7 +167,8 @@ class TransferProgress:
         if callback in self._callbacks:
             self._callbacks.remove(callback)
 
-    def update(self, total: int = None, transferred: int = None, part: int = None, parts: int = None):
+    def update(self, total: int = None, transferred: int = None, part: int = None,
+               parts: int = None):
         """
         Updates the internal state of the object.
 
@@ -222,6 +235,7 @@ class TransferHandler:
 
     def __init__(self, progress: TransferProgress):
         self._progress = progress
+        self._buffer: Optional[io.BytesIO] = None
         self._status = TransferStatus.UNKNOWN
         self._reason = "(none)"
         self._workers = set()
@@ -236,6 +250,37 @@ class TransferHandler:
         """
         return self._status
 
+    @property
+    def data(self) -> Optional[bytes]:
+        """
+        The content of the buffer where the download happens.
+        """
+        if self._buffer is not None:
+            return self._buffer.getvalue()
+        return None
+
+    @property
+    def buffer(self) -> Optional[io.BytesIO]:
+        """
+        The buffer where the download happens.
+        """
+        return self._buffer
+
+    @buffer.setter
+    def buffer(self, buffer: BytesBuffer):
+        """
+        Sets pointer to internal buffer where the download happens.
+
+        Args:
+            buffer: Download buffer.
+        """
+        if not isinstance(buffer, BytesBuffer):
+            raise ValueError(
+                f"Expected `buffer` of type `BytesBuffer`. "
+                f"Got `{str(type(buffer))}` instead."
+            )
+        self._buffer = buffer
+
     @status.setter
     def status(self, new_status: TransferStatus):
         """
@@ -246,7 +291,8 @@ class TransferHandler:
         """
         if not isinstance(new_status, TransferStatus):
             raise ValueError(
-                f"Expected `new_status` of type `TransferStatus`. " f"Got `{str(type(new_status))}` instead."
+                f"Expected `new_status` of type `TransferStatus`. " 
+                f"Got `{str(type(new_status))}` instead."
             )
         self._status = new_status
 

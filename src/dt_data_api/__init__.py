@@ -1,4 +1,4 @@
-__version__ = "1.0.0"
+__version__ = "1.0.16"
 
 from .logging import logger
 from .client import DataClient

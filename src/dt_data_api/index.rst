@@ -72,10 +72,10 @@ Permissions on the DCSS are linked to a user's Duckietown Token. You can get you
 Token from `this link <https://www.duckietown.org/site/your-token/>`_.
 
 
-Download a file
----------------
+Download an object to file
+--------------------------
 
-You can download a file from the DCSS using the following snippet,
+You can download an object from the DCSS using the following snippet,
 
 .. code-block:: python
 
@@ -85,7 +85,7 @@ You can download a file from the DCSS using the following snippet,
     storage = client.storage("public")
     storage.download('my_dir/my_file.txt', './my_file.txt')
 
-The code above will download the file `my_dir/my_file.txt` stored in the `public`
+The code above will download the object with key `my_dir/my_file.txt` stored in the `public`
 storage space to the local file `./my_file.txt`.
 
 .. note::
@@ -95,8 +95,27 @@ storage space to the local file `./my_file.txt`.
     Check out the section `Authentication`_ to see how to create an authenticated client.
 
 
+Download an object as bytes
+---------------------------
+
+You can download a file from the DCSS in a byte buffer using the following snippet,
+
+.. code-block:: python
+
+    from dt_data_api import DataClient
+
+    client = DataClient()
+    storage = client.storage("public")
+    download = storage.download('my_dir/my_file.txt')
+    download.join()
+    data: bytes = download.data
+
+The code above will download the object with key `my_dir/my_file.txt` stored in the `public`
+storage space into a byte buffer object.
+
+
 Upload a file
----------------
+-------------
 
 You can upload a file to the DCSS using the following snippet,
 
@@ -109,6 +128,24 @@ You can upload a file to the DCSS using the following snippet,
     storage.upload('./my_file.txt', 'my_dir/my_file.txt')
 
 The code above will upload the file `./my_file.txt` to `my_dir/my_file.txt` on the `private`
+storage space.
+
+
+Upload from byte buffer
+-----------------------
+
+You can upload the content of a byte buffer to the DCSS using the following snippet,
+
+.. code-block:: python
+
+    from dt_data_api import DataClient
+
+    client = DataClient("YOUR-TOKEN-HERE")
+    storage = client.storage("private")
+    data = b"my_binary_content"
+    storage.upload(data, 'my_dir/my_file.txt')
+
+The code above will upload the bytes in `data` to `my_dir/my_file.txt` on the `private`
 storage space.
 
 
