@@ -65,9 +65,15 @@ class Storage(object):
 
         """
         prefix = self._sanitize_remote_path(prefix)
-        # authorize request
-        self._check_token(f"Storage[{self._name}].list_objects_v2(...)")
-        url = self._api.authorize_request("list_objects_v2", self._full_name, prefix)
+        # public storages are publicly accessible
+        if self._name == "public":
+            # anybody can do this
+            qs = f"?prefix={prefix}"
+            url = PUBLIC_STORAGE_URL.format(bucket=self._name, object=qs)
+        else:
+            # you need permission for this, authorize request
+            self._check_token(f"Storage[{self._name}].list_objects_v2(...)")
+            url = self._api.authorize_request("list_objects_v2", self._full_name, prefix)
         # send request
         try:
             res = requests.get(url)
