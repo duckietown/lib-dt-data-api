@@ -122,6 +122,35 @@ class Storage(object):
         # ---
         return dict(res.headers)
 
+    def delete(self, obj: str) -> bool:
+        """
+        Deleted the object `obj`.
+
+        Args:
+            obj:    The object to delete.
+
+        Returns:
+            bool:   Whether the action succeded.
+
+        Raises:
+            FileNotFoundError:          The object was not found in the storage space.
+            dt_data_api.APIError:       An error occurs while communicating with the DCSS.
+
+        """
+        obj = self._sanitize_remote_path(obj)
+        # make sure the object exists
+        self.head(obj)
+        # you need permission for this, authorize request
+        self._check_token(f"Storage[{self._name}].delete(...)")
+        url = self._api.authorize_request("delete_object", self._full_name, obj)
+        # send request
+        try:
+            res = requests.delete(url)
+        except requests.exceptions.ConnectionError as e:
+            raise TransferError(e)
+        # ---
+        return res.status_code in [200, 204]
+
     def download(
         self, source: str, destination: Optional[str] = None, force: bool = False
     ) -> TransferHandler:
