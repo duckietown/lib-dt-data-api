@@ -5,7 +5,7 @@ from functools import partial
 import requests
 from bs4 import BeautifulSoup
 
-from typing import Union, BinaryIO, Dict, List, Optional
+from typing import Union, BinaryIO, Dict, List, Optional, overload, Literal
 
 from dt_authentication import DuckietownToken
 
@@ -21,6 +21,7 @@ from .utils import (
     TransferStatus,
     BytesBuffer,
 )
+from .item import Item
 from .constants import BUCKET_NAME, PUBLIC_STORAGE_URL, TRANSFER_BUF_SIZE_B
 from .exceptions import TransferError, TransferAborted, APIError
 
@@ -49,12 +50,25 @@ class Storage(object):
         """The low-level API object used to communicate with the DCSS"""
         return self._api
 
+    @overload
     def list_objects(self, prefix: str) -> List[str]:
+        ...
+
+    @overload
+    def list_objects(self, prefix: str, items: Literal[False]) -> List[str]:
+        ...
+
+    @overload
+    def list_objects(self, prefix: str, items: Literal[True]) -> List[Item]:
+        ...
+
+    def list_objects(self, prefix: str, items: bool = False) -> Union[List[str], List[Item]]:
         """
         Lists objects starting with a given prefix.
 
         Args:
             prefix:         The path prefix to start listing from.
+            items:          Returns instances of `dt_data_api.Item` instead of `str`
 
         Returns:
             list[str]:      A list of keys identifying the objects.
@@ -80,12 +94,19 @@ class Storage(object):
         except requests.exceptions.ConnectionError as e:
             raise TransferError(e)
         # parse output
-        items = []
         soup = BeautifulSoup(res.text, "xml")
-        for item in soup.find_all("Contents"):
-            items.append(item.Key.text)
+        # extract objects
+        if items:
+            objs: List[Item] = []
+            for obj in soup.find_all("Contents"):
+                item: Item = Item.parse_obj(obj)
+                objs.append(item)
+        else:
+            objs: List[str] = []
+            for obj in soup.find_all("Contents"):
+                objs.append(obj.Key.text)
         # ---
-        return items
+        return objs
 
     def head(self, obj: str) -> Dict[str, str]:
         """
