@@ -61,7 +61,7 @@ class DataAPI(object):
             dt_data_api.APIError:       An error occurs while communicating with the DCSS.
         """
         api_url = DATA_API_URL.format(action=action, bucket=bucket, object=obj)
-        api_headers = {"X-Duckietown-Token": self._token}
+        api_headers = {"Authorization": f"Token {self._token}"}
         if headers is not None:
             api_headers.update(headers)
         # request authorization
@@ -70,7 +70,8 @@ class DataAPI(object):
             raise APIError(f"API Error: Code: {res.status_code} Message: {res.text}")
         # parse answer
         answer = res.json()
-        if answer["code"] != 200:
-            raise APIError(f'API Error: Code: {answer["code"]} Message: {answer["message"]}')
+        if not answer["success"]:
+            msg = ";".join(answer["messages"])
+            raise APIError(f'API Error: {msg}')
         # get signed url
-        return answer["data"]["url"]
+        return answer["result"]["url"]
