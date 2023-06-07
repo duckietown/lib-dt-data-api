@@ -11,7 +11,6 @@ from .exceptions import TransferAborted
 
 
 class BytesBuffer(io.BytesIO):
-
     def fp(self):
         return self
 
@@ -167,8 +166,7 @@ class TransferProgress:
         if callback in self._callbacks:
             self._callbacks.remove(callback)
 
-    def update(self, total: int = None, transferred: int = None, part: int = None,
-               parts: int = None):
+    def update(self, total: int = None, transferred: int = None, part: int = None, parts: int = None):
         """
         Updates the internal state of the object.
 
@@ -276,8 +274,7 @@ class TransferHandler:
         """
         if not isinstance(buffer, BytesBuffer):
             raise ValueError(
-                f"Expected `buffer` of type `BytesBuffer`. "
-                f"Got `{str(type(buffer))}` instead."
+                f"Expected `buffer` of type `BytesBuffer`. " f"Got `{str(type(buffer))}` instead."
             )
         self._buffer = buffer
 
@@ -291,8 +288,7 @@ class TransferHandler:
         """
         if not isinstance(new_status, TransferStatus):
             raise ValueError(
-                f"Expected `new_status` of type `TransferStatus`. " 
-                f"Got `{str(type(new_status))}` instead."
+                f"Expected `new_status` of type `TransferStatus`. " f"Got `{str(type(new_status))}` instead."
             )
         self._status = new_status
 
