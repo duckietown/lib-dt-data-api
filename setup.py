@@ -3,8 +3,7 @@ from setuptools import find_packages, setup
 # :==> Fill in your project data here
 # The package name is the name on PyPI
 # it is not the python module names.
-distro = "daffy"
-package_name = "dt-data-api-{}".format(distro)
+package_name = "dt-data-api"
 library_webpage = "http://github.com/duckietown/lib-dt-data-api"
 maintainer = "Andrea F. Daniele"
 maintainer_email = "afdaniele@ttic.edu"
@@ -39,7 +38,7 @@ version = get_version_from_source("src/dt_data_api/__init__.py")
 # with open(dependencies_file, 'rt') as fin:
 #     dependencies = list(filter(lambda line: not line.startswith('#'), fin.read().splitlines()))
 
-install_requires = ["requests", "beautifulsoup4", "lxml", "dt-authentication-{}".format(distro)]
+install_requires = ["requests", "beautifulsoup4", "lxml", "dt-authentication"]
 tests_require = []
 
 # compile description
