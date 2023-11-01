@@ -26,4 +26,4 @@ jupyter
 
 # library deps
 requests
-dt-authentication-ente>=2.1.1
+dt-authentication>=2.1.6,<3
