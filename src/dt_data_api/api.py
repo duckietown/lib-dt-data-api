@@ -6,6 +6,8 @@ from dt_authentication import DuckietownToken
 from .constants import DATA_API_URL
 from .exceptions import APIError
 
+URL = str
+
 
 class DataAPI(object):
     """
@@ -39,10 +41,11 @@ class DataAPI(object):
         """The given token"""
         return self._token
 
-    def authorize_request(self, action: str, bucket: str, obj: str, headers: Dict[str, str] = None):
+    def authorize_request(self, action: str, bucket: str, obj: str, headers: Dict[str, str] = None) -> URL:
         """
         Authorizes the request to perform a given ``action`` on a given object ``obj``
-        in the storage space ``bucket``.
+        in the storage space ``bucket``. Returns the presigned URL (``str``) to use to perform
+        the request.
 
         Args:
             action (:obj:`str`):        Action to perform on the object. Allowed values are listed
