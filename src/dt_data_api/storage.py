@@ -1,6 +1,8 @@
 import os
 import io
+import re
 from functools import partial
+from urllib.parse import urlsplit, urlunsplit
 
 import requests
 from bs4 import BeautifulSoup
@@ -22,8 +24,19 @@ from .utils import (
     BytesBuffer,
 )
 from .item import Item
-from .constants import BUCKET_NAME, PUBLIC_STORAGE_URL, TRANSFER_BUF_SIZE_B
+from .constants import (
+    BUCKET_NAME,
+    STORAGE_ENDPOINT_DIRECT,
+    STORAGE_ENDPOINT_URLS,
+    STORAGE_DIRECT_URL,
+    TRANSFER_BUF_SIZE_B,
+)
 from .exceptions import TransferError, TransferAborted, APIError
+
+
+S3_DIRECT_HOST_PATTERN = re.compile(
+    r"^(?P<bucket>.+)\.s3(?:[.-][a-z0-9.-]+)?\.amazonaws\.com$"
+)
 
 
 class Storage(object):
@@ -35,20 +48,61 @@ class Storage(object):
         :py:meth:`dt_data_api.DataClient.storage` instead.
 
     Args:
-        api:    An instance of :py:class:`dt_data_api.api.DataAPI` used to communicate with the
-                RESTful Data API.
-        name:   Name of the storage space to connect to.
+        api:              An instance of :py:class:`dt_data_api.api.DataAPI` used to communicate
+                          with the RESTful Data API.
+        name:             Name of the storage space to connect to.
+        storage_endpoint: (Optional) endpoint to use for this storage space.
     """
 
-    def __init__(self, api: DataAPI, name: str):
+    def __init__(
+        self,
+        api: DataAPI,
+        name: str,
+        public_storage_endpoint: Optional[str] = None,
+        storage_endpoint: Optional[str] = None,
+    ):
         self._api = api
         self._name = name
         self._full_name = BUCKET_NAME.format(name=name)
+        if storage_endpoint is not None and public_storage_endpoint is not None:
+            raise ValueError("Specify either storage_endpoint or public_storage_endpoint, not both.")
+        self._storage_endpoint = storage_endpoint or public_storage_endpoint
+        if self._storage_endpoint is None:
+            self._storage_url = STORAGE_DIRECT_URL
+        else:
+            try:
+                self._storage_url = STORAGE_ENDPOINT_URLS[self._storage_endpoint]
+            except KeyError:
+                supported_endpoints = ", ".join(sorted(STORAGE_ENDPOINT_URLS))
+                raise ValueError(
+                    f"Unknown storage endpoint '{self._storage_endpoint}'. "
+                    f"Supported endpoints: {supported_endpoints}."
+                )
 
     @property
     def api(self) -> DataAPI:
         """The low-level API object used to communicate with the DCSS"""
         return self._api
+
+    def _endpoint_url(self, url: str) -> str:
+        if self._storage_endpoint in (None, STORAGE_ENDPOINT_DIRECT):
+            return url
+
+        parsed = urlsplit(url)
+        hostname = parsed.hostname
+        if hostname is None:
+            raise ValueError(f"Cannot configure an endpoint for URL '{url}'.")
+        if hostname.endswith(".s3-accelerate.amazonaws.com"):
+            return url
+
+        match = S3_DIRECT_HOST_PATTERN.fullmatch(hostname)
+        if match is None:
+            raise ValueError(f"Cannot configure an accelerated endpoint for S3 host '{hostname}'.")
+
+        netloc = f"{match.group('bucket')}.s3-accelerate.amazonaws.com"
+        if parsed.port is not None:
+            netloc = f"{netloc}:{parsed.port}"
+        return urlunsplit((parsed.scheme, netloc, parsed.path, parsed.query, parsed.fragment))
 
     @overload
     def list_objects(self, prefix: str) -> List[str]:
@@ -83,16 +137,22 @@ class Storage(object):
         if self._name == "public":
             # anybody can do this
             qs = f"?prefix={prefix}"
-            url = PUBLIC_STORAGE_URL.format(bucket=self._name, object=qs)
+            url = self._storage_url.format(bucket=self._name, object=qs)
         else:
             # you need permission for this, authorize request
             self._check_token(f"Storage[{self._name}].list_objects_v2(...)")
-            url = self._api.authorize_request("list_objects_v2", self._full_name, prefix)
+            url = self._endpoint_url(
+                self._api.authorize_request("list_objects_v2", self._full_name, prefix)
+            )
         # send request
         try:
             res = requests.get(url)
         except requests.exceptions.ConnectionError as e:
             raise TransferError(e)
+        if res.status_code != 200:
+            raise TransferError(
+                f"Transfer Error: Code: {res.status_code} Message: {res.text}"
+            )
         # parse output
         soup = BeautifulSoup(res.text, "xml")
         # extract objects
@@ -127,11 +187,13 @@ class Storage(object):
         obj = self._sanitize_remote_path(obj)
         if self._name == "public":
             # anybody can do this
-            url = PUBLIC_STORAGE_URL.format(bucket=self._name, object=obj)
+            url = self._storage_url.format(bucket=self._name, object=obj)
         else:
             # you need permission for this, authorize request
             self._check_token(f"Storage[{self._name}].head(...)")
-            url = self._api.authorize_request("head_object", self._full_name, obj)
+            url = self._endpoint_url(
+                self._api.authorize_request("head_object", self._full_name, obj)
+            )
         # send request
         try:
             res = requests.head(url)
@@ -140,6 +202,10 @@ class Storage(object):
         # check output
         if res.status_code == 404:
             raise FileNotFoundError(f"Object '{obj}' not found")
+        if res.status_code != 200:
+            raise TransferError(
+                f"Transfer Error: Code: {res.status_code} Message: {res.text}"
+            )
         # ---
         return dict(res.headers)
 
@@ -163,7 +229,9 @@ class Storage(object):
         self.head(obj)
         # you need permission for this, authorize request
         self._check_token(f"Storage[{self._name}].delete(...)")
-        url = self._api.authorize_request("delete_object", self._full_name, obj)
+        url = self._endpoint_url(
+            self._api.authorize_request("delete_object", self._full_name, obj)
+        )
         # send request
         try:
             res = requests.delete(url)
@@ -230,56 +298,76 @@ class Storage(object):
         def job(worker: WorkerThread, *_, **__):
             # set status to ACTIVE
             handler.set_status(TransferStatus.ACTIVE, "Worker started")
-            # open destination
-            with fp() as fout:
-                # download parts
-                for i, part in enumerate(parts):
-                    # check worker
-                    if worker.is_shutdown:
-                        logger.debug("Transfer aborted!")
-                        # set status to STOPPED
-                        handler.set_status(TransferStatus.STOPPED, "Worker was stopped")
-                        # clean up partial files
-                        clean_up()
-                        # tell the server we are done
-                        res.close()
-                        # get out of here
-                        return
-                    # ---
-                    # update progress
-                    progress.update(part=i + 1)
-                    # get url to part
-                    if self._name == "public":
-                        # anybody can do this
-                        url = PUBLIC_STORAGE_URL.format(bucket=self._name, object=part)
-                    else:
-                        # you need permission for this, authorize request
-                        self._check_token(f"Storage[{self._name}].download(...)")
-                        try:
-                            url = self._api.authorize_request("get_object", self._full_name, part)
-                        except APIError as e:
-                            # set status to ERROR
-                            handler.set_status(TransferStatus.ERROR, str(e))
-                            return
-                    # send request
-                    res = requests.get(url, stream=True)
-                    # stream content
-                    for chunk in res.iter_content(TRANSFER_BUF_SIZE_B):
+            clean_up_required = False
+            try:
+                # open destination
+                with fp() as fout:
+                    # download parts
+                    for i, part in enumerate(parts):
                         # check worker
                         if worker.is_shutdown:
                             logger.debug("Transfer aborted!")
                             # set status to STOPPED
                             handler.set_status(TransferStatus.STOPPED, "Worker was stopped")
-                            # clean up partial files
-                            clean_up()
-                            # tell the server we are done
-                            res.close()
-                            # get out of here
+                            clean_up_required = True
                             return
                         # ---
-                        fout.write(chunk)
                         # update progress
-                        progress.update(transferred=progress.transferred + len(chunk))
+                        progress.update(part=i + 1)
+                        # get url to part
+                        if self._name == "public":
+                            # anybody can do this
+                            url = self._storage_url.format(bucket=self._name, object=part)
+                        else:
+                            # you need permission for this, authorize request
+                            try:
+                                self._check_token(f"Storage[{self._name}].download(...)")
+                                url = self._endpoint_url(
+                                    self._api.authorize_request("get_object", self._full_name, part)
+                                )
+                            except (APIError, ValueError) as e:
+                                # set status to ERROR
+                                handler.set_status(TransferStatus.ERROR, str(e))
+                                clean_up_required = True
+                                return
+                        # send request
+                        try:
+                            res = requests.get(url, stream=True)
+                        except requests.exceptions.ConnectionError as e:
+                            handler.set_status(TransferStatus.ERROR, str(e))
+                            clean_up_required = True
+                            return
+                        # stream content
+                        try:
+                            if res.status_code != 200:
+                                handler.set_status(
+                                    TransferStatus.ERROR,
+                                    f"Transfer Error: Code: {res.status_code} Message: {res.text}",
+                                )
+                                clean_up_required = True
+                                return
+                            for chunk in res.iter_content(TRANSFER_BUF_SIZE_B):
+                                # check worker
+                                if worker.is_shutdown:
+                                    logger.debug("Transfer aborted!")
+                                    # set status to STOPPED
+                                    handler.set_status(TransferStatus.STOPPED, "Worker was stopped")
+                                    clean_up_required = True
+                                    return
+                                # ---
+                                fout.write(chunk)
+                                # update progress
+                                progress.update(transferred=progress.transferred + len(chunk))
+                        except requests.exceptions.RequestException as e:
+                            handler.set_status(TransferStatus.ERROR, str(e))
+                            clean_up_required = True
+                            return
+                        finally:
+                            res.close()
+            finally:
+                if clean_up_required:
+                    clean_up()
+            handler.set_status(TransferStatus.FINISHED, "Finished")
 
         # create a worker
         worker_th = WorkerThread(job)
@@ -375,12 +463,14 @@ class Storage(object):
                     **{f"x-amz-meta-owner-{k}": v for k, v in owner.items()},
                 }
                 # authorize request
-                self._check_token(f"Storage[{self._name}].upload(...)")
                 try:
-                    url = self._api.authorize_request(
-                        "put_object", self._full_name, dest_part, headers=metadata
+                    self._check_token(f"Storage[{self._name}].upload(...)")
+                    url = self._endpoint_url(
+                        self._api.authorize_request(
+                            "put_object", self._full_name, dest_part, headers=metadata
+                        )
                     )
-                except APIError as e:
+                except (APIError, ValueError) as e:
                     # set status to ERROR
                     handler.set_status(TransferStatus.ERROR, str(e))
                     return
@@ -497,8 +587,14 @@ class UserStorage(Storage):
         impersonate:
     """
 
-    def __init__(self, api: DataAPI, name: str, impersonate: Union[None, int] = None):
-        super().__init__(api, name)
+    def __init__(
+        self,
+        api: DataAPI,
+        name: str,
+        impersonate: Union[None, int] = None,
+        storage_endpoint: Optional[str] = None,
+    ):
+        super().__init__(api, name, storage_endpoint=storage_endpoint)
         self._impersonate = impersonate
 
     def _sanitize_remote_path(self, path: str) -> str:

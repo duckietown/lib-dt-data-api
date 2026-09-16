@@ -1,4 +1,4 @@
-from typing import Union
+from typing import Dict, Optional, Union
 
 from .logging import logger
 from .api import DataAPI
@@ -11,15 +11,29 @@ class DataClient(object):
     Provides an interface to the Duckietown Cloud Storage Service (DCSS).
 
     Args:
-        token (:obj:`str`):         your secret Duckietown Token
+        token (:obj:`str`):                  your secret Duckietown Token
+        public_storage_endpoint (:obj:`str`): (Optional) endpoint for public storage.
+        storage_endpoints (:obj:`dict`):     (Optional) endpoints keyed by storage space.
 
     Raises:
         dt_authentication.InvalidToken: The given token is not valid.
 
     """
 
-    def __init__(self, token: str = None):
+    def __init__(
+        self,
+        token: str = None,
+        public_storage_endpoint: Optional[str] = None,
+        storage_endpoints: Optional[Dict[str, str]] = None,
+    ):
         self._api = DataAPI(token)
+        self._public_storage_endpoint = public_storage_endpoint
+        self._storage_endpoints = dict(storage_endpoints or {})
+        if public_storage_endpoint is not None:
+            configured_endpoint = self._storage_endpoints.get("public")
+            if configured_endpoint is not None and configured_endpoint != public_storage_endpoint:
+                raise ValueError("Conflicting public storage endpoint configuration.")
+            self._storage_endpoints["public"] = public_storage_endpoint
 
     @property
     def api(self):
@@ -48,7 +62,12 @@ class DataClient(object):
                     "authenticated client. Please, pass a Duckietown token "
                     "while creating the 'DataClient' object."
                 )
-            return UserStorage(self.api, "user", impersonate=impersonate)
+            return UserStorage(
+                self.api,
+                "user",
+                impersonate=impersonate,
+                storage_endpoint=self._storage_endpoints.get(name),
+            )
         # warn the user when `impersonate` is not used properly
         if impersonate is not None:
             logger.warning(
@@ -56,4 +75,8 @@ class DataClient(object):
                 "the 'user' storage space. It will be ignored."
             )
         # any other DCSS storage unit
-        return Storage(self.api, name)
+        return Storage(
+            self.api,
+            name,
+            storage_endpoint=self._storage_endpoints.get(name),
+        )
